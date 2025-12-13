@@ -17,7 +17,9 @@
 | Authentication | ✅ Complete | Hanko/Passkey removed |
 | Integrations | ✅ Complete | Slack fully configurable for self-hosting |
 | Webhook Delivery | ✅ Complete | BullMQ replaced QStash |
-| Email | 🔄 Pending | Still uses Resend |
+| Email | ✅ Complete | SMTP/Resend (auto-detect, graceful fallback) |
+| Analytics | ✅ Complete | Tinybird optional (graceful fallback) |
+| Feature Flags | ✅ Complete | Works without EDGE_CONFIG |
 | Rate Limiting | 🔄 Pending | Still uses @upstash/ratelimit |
 | Cleanup | ✅ Complete | Trigger.dev fully removed |
 
@@ -282,6 +284,90 @@ NEXT_PRIVATE_SLACK_ENCRYPTION_KEY=<openssl rand -hex 32>
 
 ---
 
+### 10. Email Provider Migration ✅
+
+**What:** Added unified email provider supporting both SMTP and Resend with auto-detection.
+
+**Files Created:**
+- `lib/email/provider.ts` - Unified email provider with SMTP and Resend support
+
+**Files Modified:**
+- `lib/resend.ts` - Re-exports from unified provider for backwards compatibility
+- `.env.example` - Added SMTP configuration section
+- `SELF_HOSTING.md` - Added Email Configuration section
+
+**Environment Variables:**
+```bash
+# SMTP (Recommended for self-hosting)
+SMTP_HOST=smtp.email.ap-mumbai-1.oci.oraclecloud.com  # OCI
+# SMTP_HOST=email-smtp.us-east-1.amazonaws.com        # AWS SES
+SMTP_PORT=587
+SMTP_USER=your-smtp-user
+SMTP_PASSWORD=your-smtp-password
+EMAIL_FROM=Papermark <noreply@yourdomain.com>
+
+# OR Resend (cloud service)
+RESEND_API_KEY=re_xxxxxxxx
+```
+
+**Supported Providers:**
+- AWS SES (via SMTP)
+- OCI Email (via SMTP)
+- SendGrid (via SMTP)
+- Mailgun (via SMTP)
+- Any SMTP server
+- Resend (cloud API)
+
+**Features:**
+- Auto-detection: SMTP used if `SMTP_HOST` and `SMTP_PORT` are set, else Resend
+- Graceful fallback: If neither configured, logs warning once and skips emails silently
+- Same API for both providers
+- TLS support with configurable certificate verification
+- Multiple sender addresses (default, marketing, system, verify)
+- Connection verification utility
+- Errors don't crash the app - logged but not thrown
+
+---
+
+### 11. Tinybird Analytics Graceful Fallback ✅
+
+**What:** Made Tinybird analytics optional - silently skips when not configured instead of throwing errors.
+
+**Files Modified:**
+- `lib/tinybird/publish.ts` - Wrapper functions that skip ingestion if not configured
+- `lib/tinybird/pipes.ts` - Wrapper functions that return empty data if not configured
+
+**Behavior:**
+- If `TINYBIRD_TOKEN` not set: All analytics calls silently return success/empty data
+- If configured but error occurs: Logs warning but doesn't throw
+- Analytics should never break core application functionality
+
+**Features:**
+- `isTinybirdConfigured()` helper exported from publish.ts
+- All ingest functions wrapped with error handling
+- All query functions return empty arrays when not configured
+
+---
+
+### 12. Feature Flags Self-Hosting Fix ✅
+
+**What:** Fixed feature flags to not enable infrastructure-dependent features by default when `EDGE_CONFIG` is not set.
+
+**Files Modified:**
+- `lib/featureFlags/index.ts` - Added `INFRASTRUCTURE_DEPENDENT_FEATURES` list to exclude from default enablement
+
+**Problem:**
+- When `EDGE_CONFIG` not set, ALL features were enabled including `usStorage`
+- `usStorage` requires `NEXT_PRIVATE_UPLOAD_BUCKET_US` env var (separate US bucket)
+- Self-hosted setups typically use a single bucket, causing errors
+
+**Solution:**
+- Created `INFRASTRUCTURE_DEPENDENT_FEATURES` list for features requiring extra infrastructure
+- These features stay disabled in self-hosted mode unless explicitly configured
+- All other features remain enabled for full functionality
+
+---
+
 ## Remaining Items
 
 ### Priority 1: Remove @upstash/redis
@@ -300,16 +386,6 @@ NEXT_PRIVATE_SLACK_ENCRYPTION_KEY=<openssl rand -hex 32>
 **Current:** Uses `@upstash/ratelimit` for API rate limiting.
 
 **Replacement:** Use `rate-limiter-flexible` with local Redis.
-
----
-
-### Priority 4: Replace Resend with SMTP
-
-**Current:** Uses Resend for email sending.
-
-**Replacement:**
-- Use `nodemailer` with SMTP
-- Add Mailhog to docker-compose for development
 
 ---
 
@@ -410,3 +486,7 @@ NEXT_PRIVATE_CONVERSION_BASE_URL=http://localhost:3001
 | 2025-12-13 | Trigger.dev fully removed (98 packages) |
 | 2025-12-13 | Slack integration fully self-hostable |
 | 2025-12-13 | Comprehensive SELF_HOSTING.md guide created |
+| 2025-12-13 | Email provider unified (SMTP + Resend with auto-detect) |
+| 2025-12-13 | Tinybird analytics made optional (graceful fallback) |
+| 2025-12-13 | Feature flags fixed for self-hosting (usStorage disabled by default) |
+| 2025-12-13 | Email provider graceful fallback when not configured |

@@ -4,9 +4,28 @@ import { z } from "zod";
 import { VIDEO_EVENT_TYPES } from "../constants";
 import { WEBHOOK_TRIGGERS } from "../webhook/constants";
 
-const tb = new Tinybird({ token: process.env.TINYBIRD_TOKEN! });
+// ===========================================
+// TINYBIRD CONFIGURATION
+// ===========================================
 
-export const publishPageView = tb.buildIngestEndpoint({
+/**
+ * Check if Tinybird is configured
+ * Returns true only if TINYBIRD_TOKEN is set
+ */
+export function isTinybirdConfigured(): boolean {
+  return !!process.env.TINYBIRD_TOKEN;
+}
+
+// Only create Tinybird client if token is configured
+const tb = process.env.TINYBIRD_TOKEN
+  ? new Tinybird({ token: process.env.TINYBIRD_TOKEN })
+  : null;
+
+// ===========================================
+// INTERNAL ENDPOINTS (only created if configured)
+// ===========================================
+
+const _publishPageView = tb?.buildIngestEndpoint({
   datasource: "page_views__v3",
   event: z.object({
     id: z.string(),
@@ -40,7 +59,7 @@ export const publishPageView = tb.buildIngestEndpoint({
   }),
 });
 
-export const recordWebhookEvent = tb.buildIngestEndpoint({
+const _recordWebhookEvent = tb?.buildIngestEndpoint({
   datasource: "webhook_events__v1",
   event: z.object({
     event_id: z.string(),
@@ -54,7 +73,7 @@ export const recordWebhookEvent = tb.buildIngestEndpoint({
   }),
 });
 
-export const recordVideoView = tb.buildIngestEndpoint({
+const _recordVideoView = tb?.buildIngestEndpoint({
   datasource: "video_views__v1",
   event: z.object({
     timestamp: z.string(),
@@ -96,7 +115,7 @@ export const recordVideoView = tb.buildIngestEndpoint({
 });
 
 // Click event tracking when user clicks a link within a document
-export const recordClickEvent = tb.buildIngestEndpoint({
+const _recordClickEvent = tb?.buildIngestEndpoint({
   datasource: "click_events__v1",
   event: z.object({
     timestamp: z.string(),
@@ -113,7 +132,7 @@ export const recordClickEvent = tb.buildIngestEndpoint({
 });
 
 // Event track when a visitor opens a link
-export const recordLinkViewTB = tb.buildIngestEndpoint({
+const _recordLinkViewTB = tb?.buildIngestEndpoint({
   datasource: "pm_click_events__v1",
   event: z.object({
     timestamp: z.string(),
@@ -145,3 +164,57 @@ export const recordLinkViewTB = tb.buildIngestEndpoint({
     ip_address: z.string().nullable(),
   }),
 });
+
+// ===========================================
+// EXPORTED WRAPPER FUNCTIONS
+// These gracefully handle missing Tinybird configuration
+// ===========================================
+
+type IngestFn<T> = (data: T | T[]) => Promise<{ success: boolean }>;
+
+/**
+ * Creates a wrapper that skips ingestion if Tinybird is not configured
+ */
+function createSafeIngest<T>(
+  ingestFn: IngestFn<T> | undefined,
+  name: string,
+): IngestFn<T> {
+  return async (data: T | T[]) => {
+    if (!ingestFn) {
+      // Tinybird not configured - skip silently
+      return { success: true };
+    }
+    try {
+      return await ingestFn(data);
+    } catch (error) {
+      // Log error but don't throw - analytics should never break the app
+      console.warn(`[Tinybird] Failed to ingest ${name}:`, error);
+      return { success: false };
+    }
+  };
+}
+
+export const publishPageView = createSafeIngest(
+  _publishPageView,
+  "page_views",
+);
+
+export const recordWebhookEvent = createSafeIngest(
+  _recordWebhookEvent,
+  "webhook_events",
+);
+
+export const recordVideoView = createSafeIngest(
+  _recordVideoView,
+  "video_views",
+);
+
+export const recordClickEvent = createSafeIngest(
+  _recordClickEvent,
+  "click_events",
+);
+
+export const recordLinkViewTB = createSafeIngest(
+  _recordLinkViewTB,
+  "pm_click_events",
+);

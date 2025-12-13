@@ -193,10 +193,19 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
 # ===================
-# EMAIL (Resend)
+# EMAIL (SMTP or Resend)
 # ===================
 
-RESEND_API_KEY=
+# Option 1: SMTP (Recommended for self-hosting)
+# SMTP_HOST=smtp.email.ap-mumbai-1.oci.oraclecloud.com  # OCI
+# SMTP_HOST=email-smtp.us-east-1.amazonaws.com          # AWS SES
+# SMTP_PORT=587
+# SMTP_USER=
+# SMTP_PASSWORD=
+# EMAIL_FROM=Papermark <noreply@yourdomain.com>
+
+# Option 2: Resend (cloud service)
+# RESEND_API_KEY=
 
 # ===================
 # ANALYTICS (Tinybird)
@@ -299,6 +308,52 @@ npm run workers
 ---
 
 ## Integrations Setup
+
+### Email Configuration
+
+Papermark supports two email providers. **SMTP is recommended for self-hosting** as it works with AWS SES, OCI Email, or any SMTP server.
+
+#### Option 1: SMTP (Recommended)
+
+```bash
+# AWS SES
+SMTP_HOST=email-smtp.us-east-1.amazonaws.com
+SMTP_PORT=587
+SMTP_USER=your-smtp-username
+SMTP_PASSWORD=your-smtp-password
+EMAIL_FROM=Papermark <noreply@yourdomain.com>
+
+# OCI Email
+SMTP_HOST=smtp.email.ap-mumbai-1.oci.oraclecloud.com
+SMTP_PORT=587
+SMTP_USER=your-oci-smtp-user
+SMTP_PASSWORD=your-oci-smtp-password
+EMAIL_FROM=Papermark <noreply@yourdomain.com>
+```
+
+**Provider-specific setup:**
+
+| Provider | SMTP Host | Notes |
+|----------|-----------|-------|
+| AWS SES | `email-smtp.{region}.amazonaws.com` | Requires verified domain/email |
+| OCI Email | `smtp.email.{region}.oci.oraclecloud.com` | Create SMTP credentials in console |
+| SendGrid | `smtp.sendgrid.net` | Use API key as password |
+| Mailgun | `smtp.mailgun.org` | Domain-specific credentials |
+
+#### Option 2: Resend (Cloud)
+
+```bash
+RESEND_API_KEY=re_xxxxxxxx
+EMAIL_FROM=Papermark <noreply@yourdomain.com>
+```
+
+#### Verify Email Configuration
+
+The application auto-detects the provider:
+- If `SMTP_HOST` and `SMTP_PORT` are set → SMTP is used
+- Otherwise if `RESEND_API_KEY` is set → Resend is used
+
+---
 
 ### Slack Integration
 
@@ -512,8 +567,8 @@ docker-compose logs -f gotenberg
 | Office docs | ✅ | Via Gotenberg |
 | Video optimization | ✅ | Requires FFmpeg in workers |
 | Slack notifications | ✅ | Requires Slack app setup |
-| Email notifications | ⚠️ | Requires Resend or SMTP |
-| Analytics | ⚠️ | Requires Tinybird |
+| Email notifications | ✅ | Optional (SMTP/Resend), graceful fallback |
+| Analytics | ✅ | Optional (Tinybird), graceful fallback |
 | Custom domains | ⚠️ | Requires Vercel or manual setup |
 
 ---
