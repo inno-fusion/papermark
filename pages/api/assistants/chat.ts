@@ -1,40 +1,25 @@
-import { Ratelimit } from "@upstash/ratelimit";
 import { experimental_AssistantResponse } from "ai";
 import { type MessageContentText } from "openai/resources/beta/threads/messages/messages";
 import { type Run } from "openai/resources/beta/threads/runs/runs";
 
 import { openai } from "@/lib/openai";
-import { redis } from "@/lib/redis";
+import { rateLimit, isRedisConfigured } from "@/lib/redis";
 
-const ratelimit = {
-  public: new Ratelimit({
-    redis,
-    analytics: true,
-    prefix: "ratelimit:public",
-    // rate limit public to 3 request per hour
-    limiter: Ratelimit.slidingWindow(3, "1h"),
-  }),
-  free: new Ratelimit({
-    redis,
-    analytics: true,
-    prefix: "ratelimit:free",
-    // rate limit to 3 request per day
-    limiter: Ratelimit.fixedWindow(3, "24h"),
-  }),
-  paid: new Ratelimit({
-    redis,
-    analytics: true,
-    prefix: "ratelimit:paid",
-    limiter: Ratelimit.slidingWindow(60, "10s"),
-  }),
-  pro: new Ratelimit({
-    redis,
-    analytics: true,
-    prefix: "ratelimit:pro",
-    // rate limit to 1000 request per 30 days
-    limiter: Ratelimit.fixedWindow(1000, "30d"),
-  }),
-};
+// Rate limit configurations
+const rateLimitConfigs = {
+  // 3 requests per hour for public/unauthenticated users
+  public: {
+    limit: 3,
+    windowSeconds: 60 * 60, // 1 hour
+    prefix: "ratelimit:assistant:public",
+  },
+  // 3 requests per day for free users
+  free: {
+    limit: 3,
+    windowSeconds: 60 * 60 * 24, // 24 hours
+    prefix: "ratelimit:assistant:free",
+  },
+} as const;
 
 // IMPORTANT! Set the runtime to edge
 export const config = {
@@ -51,39 +36,43 @@ export default async function POST(req: Request) {
     plan: string | null;
   } = await req.json();
 
-  if (input.isPublic) {
-    const ip = req.headers.get("x-forwarded-for");
+  // Only apply rate limiting if Redis is configured
+  if (isRedisConfigured()) {
+    if (input.isPublic) {
+      const ip = req.headers.get("x-forwarded-for") || "unknown";
+      const config = rateLimitConfigs.public;
+      const key = `${config.prefix}:${ip}`;
 
-    const { success, limit, reset, remaining } = await ratelimit.public.limit(
-      `ratelimit_${ip}`,
-    );
+      const result = await rateLimit(key, config.limit, config.windowSeconds);
 
-    if (!success) {
-      return new Response("You have reached your request limit for the day.", {
-        status: 429,
-        headers: {
-          "X-RateLimit-Limit": limit.toString(),
-          "X-RateLimit-Remaining": remaining.toString(),
-          "X-RateLimit-Reset": reset.toString(),
-        },
-      });
+      if (!result.success) {
+        return new Response("You have reached your request limit for the day.", {
+          status: 429,
+          headers: {
+            "X-RateLimit-Limit": result.limit.toString(),
+            "X-RateLimit-Remaining": result.remaining.toString(),
+            "X-RateLimit-Reset": result.reset.toString(),
+          },
+        });
+      }
     }
-  }
 
-  if (input.userId && input.plan !== "pro") {
-    const { success, limit, reset, remaining } = await ratelimit.free.limit(
-      `ratelimit_${input.userId}`,
-    );
+    if (input.userId && input.plan !== "pro") {
+      const config = rateLimitConfigs.free;
+      const key = `${config.prefix}:${input.userId}`;
 
-    if (!success) {
-      return new Response("You have reached your request limit for the day.", {
-        status: 429,
-        headers: {
-          "X-RateLimit-Limit": limit.toString(),
-          "X-RateLimit-Remaining": remaining.toString(),
-          "X-RateLimit-Reset": reset.toString(),
-        },
-      });
+      const result = await rateLimit(key, config.limit, config.windowSeconds);
+
+      if (!result.success) {
+        return new Response("You have reached your request limit for the day.", {
+          status: 429,
+          headers: {
+            "X-RateLimit-Limit": result.limit.toString(),
+            "X-RateLimit-Remaining": result.remaining.toString(),
+            "X-RateLimit-Reset": result.reset.toString(),
+          },
+        });
+      }
     }
   }
 

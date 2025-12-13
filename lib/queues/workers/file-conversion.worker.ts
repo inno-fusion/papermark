@@ -70,7 +70,17 @@ async function processFileConversion(
     const version = document.versions[0];
     await updateJobProgress(job, 10, "Retrieving file...");
 
-    // 3. Get signed URL
+    // 3. Validate required fields
+    if (!version.originalFile) {
+      console.error(`[Conversion Worker] No original file for version`);
+      throw new Error("No original file available for conversion");
+    }
+
+    if (!version.contentType) {
+      console.error(`[Conversion Worker] No content type for version`);
+      throw new Error("No content type available for conversion");
+    }
+
     const fileUrl = await getFile({
       data: version.originalFile,
       type: version.storageType,

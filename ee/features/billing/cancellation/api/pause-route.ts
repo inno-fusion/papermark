@@ -1,14 +1,13 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
 import { PAUSE_COUPON_ID } from "@/ee/features/billing/cancellation/constants";
-import { sendPauseResumeNotificationTask } from "@/ee/features/billing/cancellation/lib/trigger/pause-resume-notification";
-import { automaticUnpauseTask } from "@/ee/features/billing/cancellation/lib/trigger/unpause-task";
 import { stripeInstance } from "@/ee/stripe";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { waitUntil } from "@vercel/functions";
 import { getServerSession } from "next-auth/next";
 
 import prisma from "@/lib/prisma";
+import { pauseResumeQueue, automaticUnpauseQueue } from "@/lib/queues";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
 
@@ -101,24 +100,28 @@ export async function handleRoute(req: NextApiRequest, res: NextApiResponse) {
         },
       });
 
+      // Calculate delays in milliseconds
+      const reminderDelayMs = reminderAt.getTime() - Date.now();
+      const unpauseDelayMs = pauseEndsAt.getTime() - Date.now();
+
       waitUntil(
         Promise.all([
-          // Schedule the pause resume notifications
-          sendPauseResumeNotificationTask.trigger(
+          // Schedule the pause resume notification (3 days before pause ends)
+          pauseResumeQueue.add(
+            "pause-resume-notification",
             { teamId },
             {
-              delay: reminderAt, // 3 days before pause ends
-              tags: [`team_${teamId}`],
-              idempotencyKey: `pause-resume-${teamId}-${new Date().getTime()}`,
+              delay: Math.max(0, reminderDelayMs),
+              jobId: `pause-resume-${teamId}-${Date.now()}`,
             },
           ),
           // Schedule automatic unpause when the 3-month pause period ends
-          automaticUnpauseTask.trigger(
+          automaticUnpauseQueue.add(
+            "automatic-unpause",
             { teamId },
             {
-              delay: pauseEndsAt, // Exactly when pause period ends
-              tags: [`team_${teamId}`],
-              idempotencyKey: `automatic-unpause-${teamId}-${new Date().getTime()}`,
+              delay: Math.max(0, unpauseDelayMs),
+              jobId: `automatic-unpause-${teamId}-${Date.now()}`,
             },
           ),
 

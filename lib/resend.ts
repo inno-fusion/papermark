@@ -33,4 +33,19 @@ import { isEmailConfigured } from "./email/provider";
  * @deprecated Use sendEmail() from this module instead.
  * This export is kept for backwards compatibility only.
  */
-export const resend = isEmailConfigured() ? { emails: { send: () => {} } } : null;
+type ResendBatchResult = {
+  data: { data: Array<{ id: string }> } | null;
+  error: { message: string } | null;
+};
+
+export const resend = isEmailConfigured()
+  ? {
+      emails: { send: (_: any) => {} },
+      batch: {
+        send: async (_emails: any[]): Promise<ResendBatchResult> => ({
+          data: null,
+          error: { message: "Batch send not available with SMTP. Configure RESEND_API_KEY for batch email support." },
+        }),
+      },
+    }
+  : null;

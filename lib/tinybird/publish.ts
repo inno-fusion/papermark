@@ -170,22 +170,26 @@ const _recordLinkViewTB = tb?.buildIngestEndpoint({
 // These gracefully handle missing Tinybird configuration
 // ===========================================
 
-type IngestFn<T> = (data: T | T[]) => Promise<{ success: boolean }>;
+type TinybirdIngestResult = { successful_rows: number; quarantined_rows: number };
+type TinybirdIngestFn<T> = (data: T | T[]) => Promise<TinybirdIngestResult>;
+type SafeIngestFn<T> = (data: T | T[]) => Promise<{ success: boolean }>;
 
 /**
  * Creates a wrapper that skips ingestion if Tinybird is not configured
  */
 function createSafeIngest<T>(
-  ingestFn: IngestFn<T> | undefined,
+  ingestFn: TinybirdIngestFn<T> | undefined,
   name: string,
-): IngestFn<T> {
+): SafeIngestFn<T> {
   return async (data: T | T[]) => {
     if (!ingestFn) {
       // Tinybird not configured - skip silently
       return { success: true };
     }
     try {
-      return await ingestFn(data);
+      const result = await ingestFn(data);
+      // Map Tinybird's result to our success format
+      return { success: result.successful_rows > 0 || result.quarantined_rows === 0 };
     } catch (error) {
       // Log error but don't throw - analytics should never break the app
       console.warn(`[Tinybird] Failed to ingest ${name}:`, error);

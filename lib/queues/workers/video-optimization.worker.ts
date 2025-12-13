@@ -113,7 +113,7 @@ async function processVideoOptimization(
         ])
         .output(outputPath)
         .on("error", reject)
-        .on("end", resolve)
+        .on("end", () => resolve())
         .run();
     });
 

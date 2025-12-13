@@ -140,7 +140,7 @@ export default async function handle(
             documentId: document.id,
             documentVersionId: document.versions[0].id,
             teamId,
-            conversionType: "office",
+            conversionType: "office" as const,
           },
           {
             jobId: `${teamId}-${document.versions[0].id}-docs`,
@@ -163,7 +163,7 @@ export default async function handle(
             teamId,
           },
           {
-            jobId: `${teamId}-${document.versions[0].id}-pdf`,
+            jobId: `pdf-${document.versions[0].id}`,
             tags: [
               `team_${teamId}`,
               `document_${document.id}`,

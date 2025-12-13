@@ -10,6 +10,7 @@ import {
   fileConversionQueue,
   pdfToImageQueue,
   videoOptimizationQueue,
+  type FileConversionPayload,
 } from "@/lib/queues";
 import { getExtension } from "@/lib/utils";
 import { sendDocumentCreatedWebhook } from "@/lib/webhook/triggers/document-created";
@@ -142,7 +143,7 @@ export const processDocument = async ({
     (contentType === "application/vnd.apple.keynote" ||
       contentType === "application/x-iwork-keynote-sffkey")
   ) {
-    await addJobWithTags(
+    await addJobWithTags<FileConversionPayload>(
       fileConversionQueue,
       "keynote-to-pdf",
       {
@@ -161,7 +162,7 @@ export const processDocument = async ({
       },
     );
   } else if (type === "docs" || type === "slides") {
-    await addJobWithTags(
+    await addJobWithTags<FileConversionPayload>(
       fileConversionQueue,
       "files-to-pdf",
       {
@@ -182,7 +183,7 @@ export const processDocument = async ({
   }
 
   if (type === "cad") {
-    await addJobWithTags(
+    await addJobWithTags<FileConversionPayload>(
       fileConversionQueue,
       "cad-to-pdf",
       {
@@ -239,7 +240,7 @@ export const processDocument = async ({
         teamId,
       },
       {
-        jobId: `${teamId}-${document.versions[0].id}-pdf`,
+        jobId: `pdf-${document.versions[0].id}`,
         tags: [
           `team_${teamId}`,
           `document_${document.id}`,

@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
-import { checkRateLimit, rateLimiters } from "@/ee/features/security";
+import { checkRateLimit } from "@/ee/features/security";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import EmailProvider from "next-auth/providers/email";
@@ -204,7 +204,7 @@ const getAuthOptions = (req: NextApiRequest): NextAuthOptions => {
           if (req) {
             const clientIP = getIpAddress(req.headers);
             const rateLimitResult = await checkRateLimit(
-              rateLimiters.auth,
+              "auth",
               clientIP,
             );
 

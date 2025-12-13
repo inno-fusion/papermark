@@ -181,7 +181,8 @@ export async function addJobWithTags<T extends object>(
   // Embed tags in the data for later retrieval
   const dataWithTags = { ...data, _tags: tags || [] };
 
-  return queue.add(name, dataWithTags as T, {
+  // Use type assertion to handle BullMQ's strict name typing
+  return queue.add(name as any, dataWithTags as any, {
     delay,
     jobId,
   });

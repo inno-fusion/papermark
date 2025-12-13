@@ -165,6 +165,7 @@
     "@types/mime-types": "^3.0.1",
     "@types/ms": "^2.1.0",
     "@types/node": "^22.13.5",
+    "@types/nodemailer": "^7.0.4",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/sanitize-html": "^2.13.0",

@@ -110,8 +110,10 @@ docker-compose logs -f
 | Service | URL | Purpose |
 |---------|-----|---------|
 | PostgreSQL | `postgresql://postgres:papermark@localhost:5432/papermark` | Database |
-| Redis | `redis://localhost:6379` | Job queues |
+| Redis | `redis://localhost:6379` | Job queues, rate limiting, file locking |
 | Gotenberg | `http://localhost:3001` | Document conversion |
+
+> **Note**: Redis can also use Upstash REST API for serverless deployments. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` instead of `REDIS_URL`.
 
 ---
 
@@ -141,10 +143,18 @@ POSTGRES_PRISMA_URL=postgresql://postgres:papermark@localhost:5432/papermark
 POSTGRES_PRISMA_URL_NON_POOLING=postgresql://postgres:papermark@localhost:5432/papermark
 
 # ===================
-# REDIS (BullMQ)
+# REDIS
 # ===================
 
+# Option 1: Standard Redis (recommended for self-hosting)
 REDIS_URL=redis://localhost:6379
+
+# Option 2: Upstash REST API (for serverless deployments)
+# UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
+# UPSTASH_REDIS_REST_TOKEN=xxx
+
+# Note: REDIS_URL takes priority if both are set
+# Redis is used for: BullMQ job queues, rate limiting, TUS file locking
 
 # ===================
 # STORAGE (S3)
@@ -506,6 +516,27 @@ redis-cli ping
 
 # Check worker logs
 npm run workers:dev
+
+# Verify REDIS_URL is set correctly
+echo $REDIS_URL
+```
+
+#### Redis connection issues
+
+```bash
+# Test Redis directly
+redis-cli -u redis://localhost:6379 ping
+
+# Check if Redis container is running
+docker-compose ps redis
+
+# View Redis logs
+docker-compose logs redis
+
+# For Upstash, verify credentials
+curl -X POST "https://xxx.upstash.io" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '["PING"]'
 ```
 
 #### Document conversion failing
@@ -566,10 +597,24 @@ docker-compose logs -f gotenberg
 | PDF conversion | ✅ | Via Gotenberg |
 | Office docs | ✅ | Via Gotenberg |
 | Video optimization | ✅ | Requires FFmpeg in workers |
+| Redis/caching | ✅ | Supports ioredis (REDIS_URL) or Upstash REST API |
+| Rate limiting | ✅ | Via Redis (graceful fallback if not configured) |
 | Slack notifications | ✅ | Requires Slack app setup |
 | Email notifications | ✅ | Optional (SMTP/Resend), graceful fallback |
 | Analytics | ✅ | Optional (Tinybird), graceful fallback |
 | Custom domains | ⚠️ | Requires Vercel or manual setup |
+
+### Graceful Fallbacks
+
+Papermark is designed for flexible deployment. Many services are optional:
+
+| Service | If Not Configured |
+|---------|-------------------|
+| Redis | Rate limiting disabled, uses in-memory locking for file uploads |
+| Email (SMTP/Resend) | Email features disabled, app continues working |
+| Tinybird | Analytics disabled, app continues working |
+| Slack | Slack integration unavailable |
+| Gotenberg | Office document conversion unavailable |
 
 ---
 

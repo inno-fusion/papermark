@@ -119,8 +119,8 @@ export default async function handle(
       waitUntil(
         addJobWithTags(
           emailQueue,
-          "dataroom-trial-24h-reminder",
-          { to: email!, name: fullName.split(" ")[0], teamId, emailType: "dataroom-trial-24h-reminder" },
+          "dataroom-trial-24h",
+          { to: email!, name: fullName.split(" ")[0], teamId, emailType: "dataroom-trial-24h" },
           { delay: 6 * 24 * 60 * 60 * 1000 }, // 6 days
         ),
       );

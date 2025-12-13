@@ -12,7 +12,7 @@
 |----------|--------|-------|
 | Background Jobs | ✅ Complete | BullMQ replaced Trigger.dev |
 | Database | ✅ Complete | PostgreSQL in docker-compose |
-| Redis | ✅ Complete | Redis in docker-compose |
+| Redis | ✅ Complete | Unified client (ioredis + Upstash REST) |
 | Document Conversion | ✅ Complete | Gotenberg for Office docs |
 | Authentication | ✅ Complete | Hanko/Passkey removed |
 | Integrations | ✅ Complete | Slack fully configurable for self-hosting |
@@ -20,7 +20,7 @@
 | Email | ✅ Complete | SMTP/Resend (auto-detect, graceful fallback) |
 | Analytics | ✅ Complete | Tinybird optional (graceful fallback) |
 | Feature Flags | ✅ Complete | Works without EDGE_CONFIG |
-| Rate Limiting | 🔄 Pending | Still uses @upstash/ratelimit |
+| Rate Limiting | ✅ Complete | Custom implementation, ioredis or Upstash |
 | Cleanup | ✅ Complete | Trigger.dev fully removed |
 
 ---
@@ -368,24 +368,54 @@ RESEND_API_KEY=re_xxxxxxxx
 
 ---
 
-## Remaining Items
+### 13. Unified Redis Client & Rate Limiting ✅
 
-### Priority 1: Remove @upstash/redis
+**What:** Created unified Redis client supporting both ioredis and Upstash REST API, replaced @upstash/ratelimit with custom implementation.
 
-**Current:** Uses `@upstash/redis` for caching/misc Redis operations.
+**Files Created/Modified:**
+- `lib/redis.ts` - Complete rewrite with unified interface
+  - Supports both ioredis (REDIS_URL) and Upstash REST API
+  - Graceful fallback when Redis not configured
+  - Custom sliding window rate limiter
+- `ee/features/security/lib/ratelimit.ts` - Uses unified rate limiter
+- `lib/files/tus-redis-locker.ts` - Uses ioredis with in-memory fallback
+- `pages/api/assistants/chat.ts` - Uses unified rate limiter
 
-**Files Using:**
-- Various files importing from `@upstash/redis`
+**Environment Variables:**
+```bash
+# Option 1: Standard Redis (recommended for self-hosting)
+REDIS_URL=redis://localhost:6379
 
-**Replacement:** Use `ioredis` (already installed for BullMQ).
+# Option 2: Upstash REST API (for serverless)
+UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
+UPSTASH_REDIS_REST_TOKEN=xxx
+```
+
+**Features:**
+- Auto-detection: REDIS_URL takes priority if both configured
+- Full Redis API: get, set, setex, del, incr, hset, hincrby, zadd, zrange, etc.
+- Sliding window rate limiting without @upstash/ratelimit
+- TUS file locking with in-memory fallback
+- Graceful fallback when Redis not configured
 
 ---
 
-### Priority 3: Remove @upstash/ratelimit
+## Remaining Items
 
-**Current:** Uses `@upstash/ratelimit` for API rate limiting.
+**🎉 Migration Complete!**
 
-**Replacement:** Use `rate-limiter-flexible` with local Redis.
+All cloud dependencies have been replaced with self-hostable alternatives:
+
+| Cloud Service | Replacement |
+|---------------|-------------|
+| Trigger.dev | BullMQ + Redis |
+| QStash | BullMQ webhook worker |
+| Hanko | Removed (NextAuth only) |
+| @upstash/redis | ioredis (or Upstash REST) |
+| @upstash/ratelimit | Custom sliding window |
+| Resend (required) | SMTP or Resend (optional) |
+| Tinybird (required) | Optional with graceful fallback |
+| Vercel Edge Config | Works without it |
 
 ---
 
@@ -490,3 +520,6 @@ NEXT_PRIVATE_CONVERSION_BASE_URL=http://localhost:3001
 | 2025-12-13 | Tinybird analytics made optional (graceful fallback) |
 | 2025-12-13 | Feature flags fixed for self-hosting (usStorage disabled by default) |
 | 2025-12-13 | Email provider graceful fallback when not configured |
+| 2025-12-13 | **Unified Redis client** - ioredis + Upstash REST support |
+| 2025-12-13 | **Rate limiting migrated** - Custom sliding window, no @upstash/ratelimit |
+| 2025-12-13 | **🎉 MIGRATION COMPLETE** - All cloud dependencies replaced |
