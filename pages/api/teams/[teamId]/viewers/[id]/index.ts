@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
 import { redis } from "@/lib/redis";
@@ -105,7 +106,8 @@ export default async function handle(
         select: { id: true, plan: true },
       });
 
-      if (!team || team.plan === "free") {
+      // Skip plan check in self-hosted mode
+      if (!team || (!isSelfHosted() && team.plan === "free")) {
         return res.status(404).json({ message: "Team not found" });
       }
 

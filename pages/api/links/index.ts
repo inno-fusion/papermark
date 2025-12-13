@@ -4,6 +4,7 @@ import { LinkAudienceType, Tag } from "@prisma/client";
 import { waitUntil } from "@vercel/functions";
 import { getServerSession } from "next-auth/next";
 
+import { DEFAULT_LINK_DOMAIN } from "@/lib/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
 import { CustomUser, WatermarkConfigSchema } from "@/lib/types";
@@ -73,8 +74,8 @@ export default async function handler(
 
       let { domain, slug, ...linkData } = linkDomainData;
 
-      // set domain and slug to null if the domain is papermark.com
-      if (domain && domain === "papermark.com") {
+      // set domain and slug to null if the domain is the default domain
+      if (domain && domain === DEFAULT_LINK_DOMAIN) {
         domain = null;
         slug = null;
       }

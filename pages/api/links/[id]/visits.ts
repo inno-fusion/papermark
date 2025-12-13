@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { LIMITS } from "@/lib/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
@@ -95,9 +96,9 @@ export default async function handle(
         },
       });
 
-      // limit the number of views to 20 on free plan
+      // limit the number of views to 20 on free plan (skip in self-hosted mode)
       const limitedViews =
-        result?.document?.team?.plan === "free"
+        !isSelfHosted() && result?.document?.team?.plan === "free"
           ? views.slice(0, LIMITS.views)
           : views;
 

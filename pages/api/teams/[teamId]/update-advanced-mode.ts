@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { Session } from "next-auth";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
 import { CustomUser } from "@/lib/types";
@@ -47,13 +48,16 @@ export default async function handle(
         return res.status(404).json({ error: "Team not found." });
       }
 
-      const isPlanRestricted = ["free", "starter", "pro"].includes(team.plan);
-      const isTrial = team.plan.includes("trial");
+      // Allow all features in self-hosted mode
+      if (!isSelfHosted()) {
+        const isPlanRestricted = ["free", "starter", "pro"].includes(team.plan);
+        const isTrial = team.plan.includes("trial");
 
-      if (isPlanRestricted && !isTrial) {
-        return res
-          .status(403)
-          .json({ error: "Your current plan does not allow this feature." });
+        if (isPlanRestricted && !isTrial) {
+          return res
+            .status(403)
+            .json({ error: "Your current plan does not allow this feature." });
+        }
       }
 
       // Update team limits

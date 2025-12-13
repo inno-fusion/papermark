@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { getFeatureFlags } from "@/lib/featureFlags";
 import { generateWebhookId } from "@/lib/incoming-webhooks";
 import prisma from "@/lib/prisma";
@@ -14,12 +15,14 @@ export default async function handle(
 ) {
   const { teamId } = req.query as { teamId: string };
 
-  // Check feature flag
-  const features = await getFeatureFlags({ teamId });
-  if (!features.incomingWebhooks) {
-    return res
-      .status(403)
-      .json({ error: "This feature is not available for your team" });
+  // Check feature flag (skip in self-hosted mode)
+  if (!isSelfHosted()) {
+    const features = await getFeatureFlags({ teamId });
+    if (!features.incomingWebhooks) {
+      return res
+        .status(403)
+        .json({ error: "This feature is not available for your team" });
+    }
   }
 
   if (req.method === "GET") {

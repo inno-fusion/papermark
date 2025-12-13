@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
 import { getViewUserAgent } from "@/lib/tinybird";
@@ -51,7 +52,8 @@ export default async function handle(
         return res.status(401).end("Unauthorized");
       }
 
-      if (team.plan.includes("free")) {
+      // Skip plan check in self-hosted mode
+      if (!isSelfHosted() && team.plan.includes("free")) {
         return res.status(403).end("Forbidden");
       }
       const userAgent = await getViewUserAgent({
@@ -64,8 +66,8 @@ export default async function handle(
         return res.status(404).end("No user agent data found");
       }
 
-      // Include country and city for business and datarooms plans
-      if (team.plan.includes("business") || team.plan.includes("datarooms")) {
+      // Include country and city for business and datarooms plans (or self-hosted)
+      if (isSelfHosted() || team.plan.includes("business") || team.plan.includes("datarooms")) {
         return res.status(200).json(userAgentData);
       } else {
         // For other plans, exclude country and city

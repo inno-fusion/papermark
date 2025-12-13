@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import prisma from "@/lib/prisma";
 import { addJobWithTags, exportQueue } from "@/lib/queues";
 import { jobStore } from "@/lib/redis-job-store";
@@ -97,7 +98,8 @@ export default async function handler(
       return res.status(404).end("Team not found");
     }
 
-    if (team.plan === "free") {
+    // Skip plan check in self-hosted mode
+    if (!isSelfHosted() && team.plan === "free") {
       return res
         .status(403)
         .json({ message: "This feature is not available for your plan" });

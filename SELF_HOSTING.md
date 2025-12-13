@@ -123,6 +123,13 @@ docker-compose logs -f
 
 ```bash
 # ===================
+# SELF-HOSTED MODE
+# ===================
+
+# Enable self-hosted mode (removes all plan limits)
+NEXT_PUBLIC_SELFHOSTED=1
+
+# ===================
 # CORE CONFIGURATION
 # ===================
 

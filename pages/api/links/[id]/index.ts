@@ -3,10 +3,12 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { Brand, DataroomBrand, LinkAudienceType } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import {
   fetchDataroomLinkData,
   fetchDocumentLinkData,
 } from "@/lib/api/links/link-data";
+import { DEFAULT_LINK_DOMAIN } from "@/lib/constants";
 import prisma from "@/lib/prisma";
 import { CustomUser, WatermarkConfigSchema } from "@/lib/types";
 import {
@@ -176,7 +178,8 @@ export default async function handle(
         ...link,
         ...linkData,
         dataroomId: undefined,
-        ...(teamPlan === "free" && {
+        // Skip feature restrictions in self-hosted mode
+        ...(!isSelfHosted() && teamPlan === "free" && {
           customFields: [], // reset custom fields for free plan
           enableAgreement: false,
           enableWatermark: false,
@@ -246,8 +249,8 @@ export default async function handle(
 
     let { domain, slug, ...linkData } = linkDomainData;
 
-    // set domain and slug to null if the domain is papermark.com
-    if (domain && domain === "papermark.com") {
+    // set domain and slug to null if the domain is the default domain
+    if (domain && domain === DEFAULT_LINK_DOMAIN) {
       domain = null;
       slug = null;
     }
@@ -522,8 +525,8 @@ export default async function handle(
         return res.status(404).json({ error: "Link not found" });
       }
 
-      // Check if team is on free plan
-      if (linkToBeDeleted.team?.plan === "free") {
+      // Check if team is on free plan (skip in self-hosted mode)
+      if (!isSelfHosted() && linkToBeDeleted.team?.plan === "free") {
         return res.status(403).json({
           error:
             "Link deletion is not available on the free plan. Please upgrade to delete links.",

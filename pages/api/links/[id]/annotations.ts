@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 
 import { AnnotationImage, DocumentAnnotation } from "@prisma/client";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import { getFeatureFlags } from "@/lib/featureFlags";
 import prisma from "@/lib/prisma";
@@ -54,11 +55,11 @@ export default async function handle(
       return res.status(404).json({ error: "Annotation not found" });
     }
 
-    // Check if annotations feature is enabled for this team
+    // Check if annotations feature is enabled for this team (skip in self-hosted mode)
     const featureFlags = await getFeatureFlags({
       teamId: view.teamId || undefined,
     });
-    if (!featureFlags.annotations) {
+    if (!isSelfHosted() && !featureFlags.annotations) {
       return res.status(200).json([]); // Return empty array if feature is disabled
     }
 

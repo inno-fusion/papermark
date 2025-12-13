@@ -18,7 +18,7 @@ export type LimitProps = z.infer<typeof configSchema> & {
 
 export function useLimits() {
   const teamInfo = useTeam();
-  const { isFree, isTrial } = usePlan();
+  const { isFree, isTrial, isSelfHosted } = usePlan();
   const teamId = teamInfo?.currentTeam?.id;
 
   const { data, error } = useSWR<LimitProps | null>(
@@ -34,8 +34,11 @@ export function useLimits() {
     : true;
   const canAddLinks = data?.links ? data?.usage?.links < data?.links : true;
   const canAddUsers = data?.users ? data?.usage?.users < data?.users : true;
-  const showUpgradePlanModal =
-    (isFree && !isTrial) || (isTrial && !canAddUsers);
+
+  // Never show upgrade modal in self-hosted mode
+  const showUpgradePlanModal = isSelfHosted
+    ? false
+    : (isFree && !isTrial) || (isTrial && !canAddUsers);
 
   return {
     showUpgradePlanModal,
@@ -43,6 +46,7 @@ export function useLimits() {
     canAddDocuments,
     canAddLinks,
     canAddUsers,
+    isSelfHosted,
     error,
     loading: !data && !error,
   };
