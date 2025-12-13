@@ -31,6 +31,12 @@ export default function AgreementSection({
 
   const isTextContent = agreementContentType === "TEXT";
 
+  // Transform old papermark.com URLs to use the current base URL
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
+  const transformedAgreementContent = agreementContent
+    .replace(/https?:\/\/(www\.)?papermark\.com\/view\//g, `${baseUrl}/view/`)
+    .replace(/https?:\/\/app\.papermark\.com\/view\//g, `${baseUrl}/view/`);
+
   return (
     <div className="relative flex items-start space-x-2 pt-5">
       <Checkbox
@@ -57,7 +63,7 @@ export default function AgreementSection({
           <>
             I have reviewed and agree to the terms of this{" "}
             <a
-              href={`${agreementContent}`}
+              href={transformedAgreementContent}
               target="_blank"
               rel="noreferrer noopener"
               className="underline hover:text-gray-200"

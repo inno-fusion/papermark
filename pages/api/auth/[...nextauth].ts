@@ -199,6 +199,26 @@ const getAuthOptions = (req: NextApiRequest): NextAuthOptions => {
           return false;
         }
 
+        // Block new user signups if disabled
+        const isSignupDisabled =
+          process.env.NEXT_PUBLIC_DISABLE_SIGNUP === "true" ||
+          process.env.NEXT_PUBLIC_DISABLE_SIGNUP === "1";
+
+        if (isSignupDisabled && user.email) {
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email },
+            select: { id: true },
+          });
+
+          if (!existingUser) {
+            log({
+              message: `Signup blocked for ${user.email} - signups are disabled`,
+              type: "info",
+            });
+            return false;
+          }
+        }
+
         // Apply rate limiting for signin attempts
         try {
           if (req) {

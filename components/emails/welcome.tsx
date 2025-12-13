@@ -21,7 +21,7 @@ interface WelcomeEmailProps {
 }
 
 const WelcomeEmail = ({ name }: WelcomeEmailProps) => {
-  const previewText = `The document sharing infrastructure for the modern web`;
+  const previewText = `Secure document sharing with built-in analytics`;
 
   return (
     <Html>
@@ -32,15 +32,14 @@ const WelcomeEmail = ({ name }: WelcomeEmailProps) => {
           <Container className="mx-auto my-10 w-[465px] p-5">
             <Text className="mx-0 mb-8 mt-4 p-0 text-center text-2xl font-normal">
               Welcome to{" "}
-              <span className="font-bold tracking-tighter">Papermark</span>
+              <span className="font-bold tracking-tighter">DocRoom</span>
             </Text>
             <Text className="text-sm">
               Thanks for signing up{name && `, ${name}`}!
             </Text>
             <Text className="text-sm">
-              My name is Marc, and I&apos;m the founder of Papermark – the
-              secure way to share documents and data rooms. I&apos;m excited to
-              have you on board!
+              DocRoom by 0xMetaLabs is the secure way to share documents and
+              data rooms. We&apos;re excited to have you on board!
             </Text>
             <Text className="text-sm">
               Here are a few things you can do to get started:
@@ -66,46 +65,13 @@ const WelcomeEmail = ({ name }: WelcomeEmailProps) => {
 
             <Section className="mt-4">
               <Text className="text-sm">
-                If you have any questions or feedback just respond to this
-                email.{" "}
-                <Link
-                  href="https://cal.link/papermark"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Book a call
-                </Link>{" "}
-                to discuss your enterprise needs. I&apos;m always happy to help!
+                If you have any questions or feedback, just respond to this
+                email. We&apos;re always happy to help!
               </Text>
 
-              <Text className="text-sm text-gray-400">Marc from Papermark</Text>
+              <Text className="text-sm text-gray-400">The DocRoom Team</Text>
             </Section>
             <Footer />
-            <Text className="flex gap-x-1 text-xs">
-              <Link
-                href="https://www.papermark.com/customers"
-                target="_blank"
-                className="text-xs text-gray-400"
-              >
-                Customer stories
-              </Link>
-              <Link
-                href="https://x.com/papermarkio"
-                target="_blank"
-                className="text-xs text-gray-400"
-                rel="noopener noreferrer"
-              >
-                · X/Twitter
-              </Link>
-              <Link
-                href="https://www.linkedin.com/company/papermarkio"
-                target="_blank"
-                className="text-xs text-gray-400"
-                rel="noopener noreferrer"
-              >
-                · LinkedIn
-              </Link>
-            </Text>
           </Container>
         </Body>
       </Tailwind>

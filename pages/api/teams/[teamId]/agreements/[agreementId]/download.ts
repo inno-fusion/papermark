@@ -73,20 +73,21 @@ export default async function handle(
 
       const agreement = team.agreements[0];
 
-      // Check if the content is a Papermark URL
-      const isPapermarkUrl =
-        agreement.content.includes("papermark.com/view/") ||
-        agreement.content.includes("www.papermark.com/view/");
+      // Check if the content is an internal document URL (self-hosted)
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTAUTH_URL || "";
+      const baseUrlHost = baseUrl ? new URL(baseUrl).host : "";
+      const isInternalUrl =
+        agreement.content.includes("/view/") && agreement.content.includes(baseUrlHost);
 
       let fileContent: string;
       let filename: string;
       let link: any = null;
 
-      if (isPapermarkUrl) {
-        // Extract linkId from Papermark URL
+      if (isInternalUrl) {
+        // Extract linkId from document URL
         const urlParts = agreement.content.split("/view/");
         if (urlParts.length < 2) {
-          return res.status(400).json("Invalid Papermark URL format");
+          return res.status(400).json("Invalid document URL format");
         }
 
         const linkId = urlParts[1].split(/[/?#]/)[0]; // Get linkId, remove any query params or fragments
@@ -122,7 +123,7 @@ export default async function handle(
         if (!link || !link.document) {
           return res
             .status(404)
-            .json("Document not found for the provided Papermark URL");
+            .json("Document not found for the provided URL");
         }
 
         // Use the primary version if available, otherwise use the document file
