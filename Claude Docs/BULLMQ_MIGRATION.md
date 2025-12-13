@@ -1,33 +1,30 @@
 # BullMQ Migration Plan: Replacing Trigger.dev
 
 **Purpose:** Replace Trigger.dev with BullMQ for complete self-hosting capability.
+**Goal:** Drop-in replacement - all existing functionality must work identically.
 
 ---
 
 ## Table of Contents
 
 1. [Current Architecture](#1-current-architecture)
-2. [Document Conversion Flow](#2-document-conversion-flow)
-3. [Trigger.dev Jobs Inventory](#3-triggerdev-jobs-inventory)
-4. [BullMQ Migration Plan](#4-bullmq-migration-plan)
-5. [Implementation Guide](#5-implementation-guide)
-6. [Code Changes Required](#6-code-changes-required)
+2. [Complete Trigger.dev Inventory](#2-complete-triggerdev-inventory)
+3. [BullMQ Architecture](#3-bullmq-architecture)
+4. [Implementation Guide](#4-implementation-guide)
+5. [Code Changes Required](#5-code-changes-required)
+6. [Feature Parity Mappings](#6-feature-parity-mappings)
 7. [Testing Checklist](#7-testing-checklist)
 
 ---
 
 ## 1. Current Architecture
 
-### How Document Processing Works Today
+### How It Works Today
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        CURRENT FLOW (Trigger.dev)                         │
-└──────────────────────────────────────────────────────────────────────────┘
-
-User Upload → S3 → API creates DB records → Trigger.dev Cloud → Workers → Done
-                                                    ↑
-                                            (EXTERNAL DEPENDENCY)
+User Action → API Endpoint → Trigger.dev Cloud → Workers → Done
+                                    ↑
+                            (EXTERNAL DEPENDENCY)
 ```
 
 ### Components
@@ -35,260 +32,126 @@ User Upload → S3 → API creates DB records → Trigger.dev Cloud → Workers 
 | Component | Technology | Location |
 |-----------|------------|----------|
 | Job Queue | Trigger.dev v3 (Cloud) | External SaaS |
-| Job Definitions | Trigger.dev SDK | `lib/trigger/*.ts` |
-| PDF Rendering | MuPDF WASM | `pages/api/mupdf/*.ts` (LOCAL) |
-| File Storage | AWS S3 | Your bucket |
-| Database | PostgreSQL | Your Docker |
+| Job Definitions | Trigger.dev SDK | `lib/trigger/*.ts` + `ee/*/trigger/*.ts` |
+| Realtime Progress | Trigger.dev React Hooks | `lib/utils/use-progress-status.ts` |
+| Job Management | Trigger.dev SDK (`runs.list`, `runs.cancel`) | Various API files |
+| Scheduled Jobs | Trigger.dev `schedules.task` | `lib/trigger/cleanup-expired-exports.ts` |
 
 ---
 
-## 2. Document Conversion Flow
+## 2. Complete Trigger.dev Inventory
 
-### 2.1 PDF Upload Flow (Most Common)
+### 2.1 All Trigger Job Files (11 total)
 
-```
-1. USER UPLOADS PDF
-   │
-   ▼
-2. Frontend (lib/files/put-file.ts)
-   - Uploads file directly to S3
-   - Returns S3 key (e.g., "teamId/doc_xxx/filename.pdf")
-   │
-   ▼
-3. API Endpoint (pages/api/teams/[teamId]/documents/index.ts)
-   - Receives upload confirmation
-   - Calls processDocument()
-   │
-   ▼
-4. processDocument() (lib/api/documents/process-document.ts)
-   │
-   ├── Creates Document record in PostgreSQL
-   │   └── { name, file, type: "pdf", teamId, ... }
-   │
-   ├── Creates DocumentVersion record
-   │   └── { file, isPrimary: true, hasPages: false, ... }
-   │
-   └── Triggers Trigger.dev job (LINE 232):
-       │
-       │   await convertPdfToImageRoute.trigger({
-       │     documentId: document.id,
-       │     documentVersionId: document.versions[0].id,
-       │     teamId,
-       │   });
-       │
-       ▼
-5. Trigger.dev Cloud (EXTERNAL - THIS IS THE PROBLEM)
-   - Receives job
-   - Queues it
-   - Executes when worker available
-   │
-   ▼
-6. convertPdfToImageRoute Task (lib/trigger/pdf-to-image-route.ts)
-   │
-   ├── Gets signed URL from S3 for the PDF
-   │
-   ├── Calls /api/mupdf/get-pages
-   │   └── Returns: { numPages: N }
-   │
-   ├── FOR EACH PAGE (1 to N):
-   │   │
-   │   └── Calls /api/mupdf/convert-page
-   │       │
-   │       ├── Fetches PDF from S3
-   │       ├── Uses MuPDF WASM to render page
-   │       ├── Converts to PNG or JPEG (smaller wins)
-   │       ├── Uploads image to S3
-   │       └── Creates DocumentPage record
-   │
-   ├── Updates DocumentVersion:
-   │   └── { hasPages: true, isPrimary: true, numPages: N }
-   │
-   └── Calls /api/revalidate to clear cache
-       │
-       ▼
-7. DONE - Document is viewable
-   - DocumentVersion.hasPages = true
-   - DocumentPage records exist for each page
-   - Preview API returns images instead of "still processing"
-```
+| File | Task ID | Type | Priority |
+|------|---------|------|----------|
+| `lib/trigger/pdf-to-image-route.ts` | `convert-pdf-to-image-route` | task | **P0** |
+| `lib/trigger/convert-files.ts` | `convert-files-to-pdf`, `convert-cad-to-pdf`, `convert-keynote-to-pdf` | task | **P0** |
+| `lib/trigger/optimize-video-files.ts` | `process-video` | task | P1 |
+| `lib/trigger/export-visits.ts` | `export-visits` | task | P1 |
+| `lib/trigger/send-scheduled-email.ts` | 4 tasks (trial info, 24h reminder, expired, upgrade checkin) | task | P1 |
+| `lib/trigger/dataroom-change-notification.ts` | `send-dataroom-change-notification` | task | P2 |
+| `lib/trigger/cleanup-expired-exports.ts` | `cleanup-expired-exports` | **schedules.task** | P2 |
+| `ee/features/conversations/lib/trigger/conversation-message-notification.ts` | 2 tasks (viewer + team member notifications) | task | P2 |
+| `ee/features/billing/cancellation/lib/trigger/pause-resume-notification.ts` | `send-pause-resume-notification` | task | P2 |
+| `ee/features/billing/cancellation/lib/trigger/unpause-task.ts` | `automatic-unpause-subscription` | task | P2 |
 
-### 2.2 Office Document Flow (DOCX, PPTX, XLSX)
+### 2.2 All Files That Call `.trigger()` (12 files)
 
-```
-1. Upload Office file to S3
-   │
-   ▼
-2. processDocument() triggers convertFilesToPdfTask
-   │
-   ▼
-3. convertFilesToPdfTask (lib/trigger/convert-files.ts)
-   │
-   ├── Gets signed URL from S3
-   │
-   ├── Calls EXTERNAL LibreOffice API:
-   │   POST ${NEXT_PRIVATE_CONVERSION_BASE_URL}/forms/libreoffice/convert
-   │   └── Returns: PDF buffer
-   │
-   ├── Uploads converted PDF to S3
-   │
-   ├── Updates DocumentVersion with new PDF path
-   │
-   └── Triggers convertPdfToImageRoute (same as PDF flow)
-       │
-       ▼
-4. PDF → Images (same as above)
-```
+| File | What it triggers |
+|------|------------------|
+| `lib/api/documents/process-document.ts` | PDF, Office, CAD, Keynote, Video conversions |
+| `lib/trigger/convert-files.ts` | Chains to `convertPdfToImageRoute` |
+| `pages/api/teams/[teamId]/documents/agreement.ts` | PDF conversion |
+| `pages/api/teams/[teamId]/documents/[id]/versions/index.ts` | PDF/Office conversions |
+| `pages/api/teams/[teamId]/export-jobs.ts` | `exportVisitsTask` |
+| `pages/api/teams/[teamId]/datarooms/trial.ts` | 3 scheduled email tasks |
+| `pages/api/teams/[teamId]/datarooms/[id]/documents/index.ts` | Dataroom notifications |
+| `ee/features/conversations/api/conversations-route.ts` | Conversation notifications |
+| `ee/features/conversations/api/team-conversations-route.ts` | Conversation notifications |
+| `ee/features/billing/cancellation/api/pause-route.ts` | Pause/unpause tasks |
+| `ee/stripe/webhooks/checkout-session-completed.ts` | Upgrade checkin email |
 
-### 2.3 CAD/Keynote Flow
+### 2.3 Files Using Trigger.dev SDK APIs
 
-```
-Same as Office, but uses ConvertAPI instead of LibreOffice:
-POST ${NEXT_PRIVATE_CONVERT_API_URL}
-```
+| File | SDK Usage | Replacement Needed |
+|------|-----------|-------------------|
+| `lib/utils/use-progress-status.ts` | `useRealtimeRunsWithTag` | Custom progress polling/SSE |
+| `lib/utils/generate-trigger-status.ts` | `metadata.set/get` | `job.updateProgress()` |
+| `lib/utils/generate-trigger-auth-token.ts` | `auth.createPublicToken` | Custom JWT/session tokens |
+| `lib/utils/trigger-utils.ts` | Queue config helper | Remove or adapt |
+| `pages/api/teams/[teamId]/export-jobs/[exportId].ts` | `runs.cancel` | `job.remove()` |
+| `pages/api/teams/[teamId]/datarooms/[id]/documents/index.ts` | `runs.list`, `runs.cancel` | Queue job helpers |
+| `ee/features/conversations/api/conversations-route.ts` | `runs.list`, `runs.cancel` | Queue job helpers |
+
+### 2.4 Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `trigger.config.ts` | Trigger.dev configuration - will be removed |
 
 ---
 
-## 3. Trigger.dev Jobs Inventory
+## 3. BullMQ Architecture
 
-### Jobs That Need Migration
-
-| Job ID | File | Purpose | Priority |
-|--------|------|---------|----------|
-| `convert-pdf-to-image-route` | `lib/trigger/pdf-to-image-route.ts` | PDF → page images | **P0 - Critical** |
-| `convert-files-to-pdf` | `lib/trigger/convert-files.ts` | Office → PDF | P1 |
-| `convert-cad-to-pdf` | `lib/trigger/convert-files.ts` | CAD → PDF | P2 (can disable) |
-| `convert-keynote-to-pdf` | `lib/trigger/convert-files.ts` | Keynote → PDF | P2 (can disable) |
-| `optimize-video-files` | `lib/trigger/optimize-video-files.ts` | Video transcoding | P1 |
-| `export-visits` | `lib/trigger/export-visits.ts` | Export analytics | P2 |
-| `send-scheduled-email` | `lib/trigger/send-scheduled-email.ts` | Delayed emails | P2 |
-| `dataroom-change-notification` | `lib/trigger/dataroom-change-notification.ts` | Notifications | P2 |
-| `cleanup-expired-exports` | `lib/trigger/cleanup-expired-exports.ts` | Cleanup cron | P3 |
-| `conversation-message-notification` | `ee/features/conversations/lib/trigger/` | Chat notifications | P3 |
-| `pause-reminder-notification` | `ee/features/billing/cancellation/lib/trigger/` | Billing reminders | P3 |
-
-### Files That Import Trigger.dev
-
-```bash
-# Find all Trigger.dev imports
-grep -r "@trigger.dev" --include="*.ts" --include="*.tsx" -l
-
-# Results:
-lib/trigger/pdf-to-image-route.ts
-lib/trigger/convert-files.ts
-lib/trigger/optimize-video-files.ts
-lib/trigger/export-visits.ts
-lib/trigger/send-scheduled-email.ts
-lib/trigger/dataroom-change-notification.ts
-lib/trigger/cleanup-expired-exports.ts
-lib/api/documents/process-document.ts
-lib/utils/trigger-utils.ts
-pages/api/teams/[teamId]/documents/agreement.ts
-pages/api/teams/[teamId]/documents/[id]/versions/index.ts
-trigger.config.ts
-ee/features/conversations/lib/trigger/conversation-message-notification.ts
-ee/features/billing/cancellation/lib/trigger/pause-reminder-notification.ts
-```
-
-### Files That Call .trigger()
-
-```bash
-# Find all job triggers
-grep -r "\.trigger(" --include="*.ts" -l
-
-# Key files:
-lib/api/documents/process-document.ts          # Main document processing
-lib/trigger/convert-files.ts                   # Chains to pdf-to-image
-pages/api/teams/[teamId]/documents/agreement.ts
-pages/api/teams/[teamId]/documents/[id]/versions/index.ts
-```
-
----
-
-## 4. BullMQ Migration Plan
-
-### 4.1 Architecture After Migration
+### 3.1 New Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        NEW FLOW (BullMQ)                                  │
-└──────────────────────────────────────────────────────────────────────────┘
-
-User Upload → S3 → API creates DB records → Local Redis Queue → Local Workers → Done
-                                                    ↑
-                                              (SELF-HOSTED)
-
-Components:
-- Redis: Docker container (localhost:6379)
-- BullMQ: npm package for queue management
-- Workers: Separate Node.js process
+User Action → API Endpoint → Redis Queue → Local Workers → Done
+                                  ↑
+                            (SELF-HOSTED)
 ```
 
-### 4.2 New File Structure
+### 3.2 File Structure
 
 ```
 lib/
 ├── queues/
-│   ├── connection.ts           # Redis connection
-│   ├── index.ts                # Queue definitions
+│   ├── connection.ts              # Redis connection singleton
+│   ├── index.ts                   # Queue definitions & exports
+│   ├── types.ts                   # Shared payload types
+│   ├── helpers.ts                 # Job management helpers (list, cancel, etc.)
 │   └── workers/
+│       ├── index.ts               # Worker registry
 │       ├── pdf-to-image.worker.ts
 │       ├── file-conversion.worker.ts
 │       ├── video-optimization.worker.ts
-│       ├── export.worker.ts
-│       ├── email.worker.ts
+│       ├── export-visits.worker.ts
+│       ├── scheduled-email.worker.ts
 │       ├── notification.worker.ts
-│       └── index.ts            # Worker registry
+│       ├── billing.worker.ts
+│       └── cleanup.worker.ts
+│
+├── progress/
+│   ├── index.ts                   # Progress API helpers
+│   └── use-job-progress.ts        # React hook for job progress
 │
 workers/
-└── index.ts                    # Worker process entry point
+└── index.ts                       # Worker process entry point
 ```
 
-### 4.3 Dependencies to Install
+### 3.3 Dependencies
 
 ```bash
 npm install bullmq ioredis
-npm install -D tsx concurrently @types/ioredis
+npm install -D tsx concurrently
 ```
 
-### 4.4 Docker Compose Addition
-
-```yaml
-# docker-compose.local.yml
-services:
-  redis:
-    image: redis:7-alpine
-    container_name: papermark-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-volumes:
-  redis-data:
-```
-
-### 4.5 Environment Variables
+### 3.4 Environment Variables
 
 ```bash
 # Add to .env
 REDIS_URL=redis://localhost:6379
 
-# For worker -> app API calls
+# Already exists - used for worker -> API calls
 INTERNAL_API_KEY=your-secure-internal-api-key-here
 ```
 
 ---
 
-## 5. Implementation Guide
+## 4. Implementation Guide
 
-### Step 1: Create Redis Connection
+### Step 1: Redis Connection
 
 **File: `lib/queues/connection.ts`**
 
@@ -297,7 +160,7 @@ import Redis from "ioredis";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
-// Create a new connection for each use case
+// Create a new connection for each use case (required for BullMQ workers)
 export function createRedisConnection() {
   return new Redis(REDIS_URL, {
     maxRetriesPerRequest: null, // Required for BullMQ
@@ -305,161 +168,43 @@ export function createRedisConnection() {
   });
 }
 
-// Shared connection for queue operations
-export const redisConnection = createRedisConnection();
+// Shared connection for queue operations (adding jobs)
+let sharedConnection: Redis | null = null;
 
-// Test connection
-redisConnection.on("connect", () => {
-  console.log("[Redis] Connected to", REDIS_URL);
-});
+export function getRedisConnection() {
+  if (!sharedConnection) {
+    sharedConnection = createRedisConnection();
 
-redisConnection.on("error", (err) => {
-  console.error("[Redis] Connection error:", err);
-});
-```
+    sharedConnection.on("connect", () => {
+      console.log("[Redis] Connected to", REDIS_URL);
+    });
 
----
+    sharedConnection.on("error", (err) => {
+      console.error("[Redis] Connection error:", err);
+    });
+  }
+  return sharedConnection;
+}
 
-### Step 2: Define Queues
-
-**File: `lib/queues/index.ts`**
-
-```typescript
-import { Queue, QueueEvents } from "bullmq";
-import { redisConnection } from "./connection";
-
-// ============================================
-// QUEUE DEFINITIONS
-// ============================================
-
-// PDF to Image conversion (most critical)
-export const pdfToImageQueue = new Queue("pdf-to-image", {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: {
-      type: "exponential",
-      delay: 1000,
-    },
-    removeOnComplete: {
-      count: 100,  // Keep last 100 completed jobs
-    },
-    removeOnFail: {
-      count: 50,   // Keep last 50 failed jobs
-    },
-  },
-});
-
-// Office/CAD/Keynote to PDF conversion
-export const fileConversionQueue = new Queue("file-conversion", {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: {
-      type: "exponential",
-      delay: 2000,
-    },
-  },
-});
-
-// Video optimization
-export const videoOptimizationQueue = new Queue("video-optimization", {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 2,
-    backoff: {
-      type: "exponential",
-      delay: 5000,
-    },
-  },
-});
-
-// Export visits to Excel/CSV
-export const exportQueue = new Queue("export-visits", {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 3,
-  },
-});
-
-// Scheduled emails
-export const emailQueue = new Queue("scheduled-email", {
-  connection: redisConnection,
-});
-
-// Notifications (dataroom changes, conversations, etc.)
-export const notificationQueue = new Queue("notifications", {
-  connection: redisConnection,
-});
-
-// Webhook delivery
-export const webhookQueue = new Queue("webhook-delivery", {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 5,
-    backoff: {
-      type: "exponential",
-      delay: 2000,
-    },
-  },
-});
-
-// Cleanup jobs (scheduled)
-export const cleanupQueue = new Queue("cleanup", {
-  connection: redisConnection,
-});
-
-// ============================================
-// QUEUE EVENTS (for monitoring)
-// ============================================
-
-export const pdfToImageEvents = new QueueEvents("pdf-to-image", {
-  connection: redisConnection,
-});
-
-export const fileConversionEvents = new QueueEvents("file-conversion", {
-  connection: redisConnection,
-});
-
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
-
-export async function getQueueStats() {
-  const [pdfWaiting, pdfActive, pdfCompleted, pdfFailed] = await Promise.all([
-    pdfToImageQueue.getWaitingCount(),
-    pdfToImageQueue.getActiveCount(),
-    pdfToImageQueue.getCompletedCount(),
-    pdfToImageQueue.getFailedCount(),
-  ]);
-
-  return {
-    pdfToImage: {
-      waiting: pdfWaiting,
-      active: pdfActive,
-      completed: pdfCompleted,
-      failed: pdfFailed,
-    },
-  };
+// Graceful shutdown
+export async function closeRedisConnection() {
+  if (sharedConnection) {
+    await sharedConnection.quit();
+    sharedConnection = null;
+  }
 }
 ```
 
 ---
 
-### Step 3: Create PDF-to-Image Worker (Critical)
+### Step 2: Shared Types
 
-**File: `lib/queues/workers/pdf-to-image.worker.ts`**
+**File: `lib/queues/types.ts`**
 
 ```typescript
-import { Job, Worker } from "bullmq";
-import { createRedisConnection } from "../connection";
-import prisma from "@/lib/prisma";
-import { getFile } from "@/lib/files/get-file";
-
 // ============================================
-// TYPE DEFINITIONS
+// PDF TO IMAGE
 // ============================================
-
 export type PdfToImagePayload = {
   documentId: string;
   documentVersionId: string;
@@ -467,282 +212,9 @@ export type PdfToImagePayload = {
   versionNumber?: number;
 };
 
-type PdfToImageResult = {
-  success: boolean;
-  totalPages?: number;
-  error?: string;
-};
-
 // ============================================
-// WORKER PROCESSOR
+// FILE CONVERSION (Office, CAD, Keynote)
 // ============================================
-
-async function processPdfToImage(
-  job: Job<PdfToImagePayload>
-): Promise<PdfToImageResult> {
-  const { documentVersionId, teamId, documentId, versionNumber } = job.data;
-
-  console.log(`[PDF Worker] Starting job ${job.id} for version: ${documentVersionId}`);
-
-  try {
-    // ----------------------------------------
-    // 1. Get document version from database
-    // ----------------------------------------
-    const documentVersion = await prisma.documentVersion.findUnique({
-      where: { id: documentVersionId },
-      select: {
-        file: true,
-        storageType: true,
-        numPages: true,
-      },
-    });
-
-    if (!documentVersion) {
-      throw new Error(`Document version not found: ${documentVersionId}`);
-    }
-
-    await job.updateProgress(10);
-    console.log(`[PDF Worker] Found document version, getting signed URL...`);
-
-    // ----------------------------------------
-    // 2. Get signed URL from S3
-    // ----------------------------------------
-    const signedUrl = await getFile({
-      type: documentVersion.storageType,
-      data: documentVersion.file,
-    });
-
-    if (!signedUrl) {
-      throw new Error("Failed to get signed URL for document");
-    }
-
-    await job.updateProgress(20);
-
-    // ----------------------------------------
-    // 3. Get page count if not already set
-    // ----------------------------------------
-    let numPages = documentVersion.numPages;
-
-    if (!numPages || numPages === 1) {
-      console.log(`[PDF Worker] Getting page count...`);
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BASE_URL}/api/mupdf/get-pages`,
-        {
-          method: "POST",
-          body: JSON.stringify({ url: signedUrl }),
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.INTERNAL_API_KEY}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to get page count: ${response.status} - ${errorText}`);
-      }
-
-      const { numPages: pageCount } = (await response.json()) as { numPages: number };
-
-      if (pageCount < 1) {
-        throw new Error("Invalid page count returned");
-      }
-
-      numPages = pageCount;
-      console.log(`[PDF Worker] Document has ${numPages} pages`);
-    }
-
-    await job.updateProgress(30);
-
-    // ----------------------------------------
-    // 4. Convert each page to image
-    // ----------------------------------------
-    let conversionSuccess = true;
-    let lastError: string | undefined;
-
-    for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
-      console.log(`[PDF Worker] Converting page ${pageNumber}/${numPages}...`);
-
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_BASE_URL}/api/mupdf/convert-page`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              documentVersionId,
-              pageNumber,
-              url: signedUrl,
-              teamId,
-            }),
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.INTERNAL_API_KEY}`,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-
-          // Check if document was blocked (e.g., contains prohibited content)
-          if (response.status === 400 && errorData.error?.includes("blocked")) {
-            console.error(`[PDF Worker] Document blocked at page ${pageNumber}`);
-            conversionSuccess = false;
-            lastError = "Document processing blocked";
-            break;
-          }
-
-          throw new Error(`Failed to convert page ${pageNumber}: ${response.status}`);
-        }
-
-        const { documentPageId } = (await response.json()) as { documentPageId: string };
-        console.log(`[PDF Worker] Page ${pageNumber} converted: ${documentPageId}`);
-
-      } catch (error) {
-        conversionSuccess = false;
-        lastError = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[PDF Worker] Error on page ${pageNumber}:`, lastError);
-        break;
-      }
-
-      // Update progress (30% to 90% for page conversion)
-      const progress = 30 + Math.floor((pageNumber / numPages) * 60);
-      await job.updateProgress(progress);
-    }
-
-    if (!conversionSuccess) {
-      throw new Error(lastError || "Page conversion failed");
-    }
-
-    await job.updateProgress(90);
-
-    // ----------------------------------------
-    // 5. Update document version in database
-    // ----------------------------------------
-    console.log(`[PDF Worker] Updating document version...`);
-
-    await prisma.documentVersion.update({
-      where: { id: documentVersionId },
-      data: {
-        numPages,
-        hasPages: true,
-        isPrimary: true,
-      },
-    });
-
-    // ----------------------------------------
-    // 6. Update other versions to not primary
-    // ----------------------------------------
-    if (versionNumber) {
-      await prisma.documentVersion.updateMany({
-        where: {
-          documentId,
-          versionNumber: { not: versionNumber },
-        },
-        data: {
-          isPrimary: false,
-        },
-      });
-    }
-
-    await job.updateProgress(95);
-
-    // ----------------------------------------
-    // 7. Revalidate link cache
-    // ----------------------------------------
-    console.log(`[PDF Worker] Revalidating cache...`);
-
-    try {
-      await fetch(
-        `${process.env.NEXTAUTH_URL}/api/revalidate?secret=${process.env.REVALIDATE_TOKEN}&documentId=${documentId}`
-      );
-    } catch (revalidateError) {
-      // Non-fatal error, just log it
-      console.warn(`[PDF Worker] Revalidation failed:`, revalidateError);
-    }
-
-    await job.updateProgress(100);
-
-    console.log(`[PDF Worker] Job ${job.id} completed successfully`);
-
-    return {
-      success: true,
-      totalPages: numPages,
-    };
-
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[PDF Worker] Job ${job.id} failed:`, errorMessage);
-
-    return {
-      success: false,
-      error: errorMessage,
-    };
-  }
-}
-
-// ============================================
-// WORKER INSTANCE
-// ============================================
-
-export function createPdfToImageWorker() {
-  const worker = new Worker<PdfToImagePayload, PdfToImageResult>(
-    "pdf-to-image",
-    processPdfToImage,
-    {
-      connection: createRedisConnection(),
-      concurrency: 5, // Process 5 jobs simultaneously
-      limiter: {
-        max: 10,      // Max 10 jobs
-        duration: 1000, // Per second
-      },
-    }
-  );
-
-  // Event handlers
-  worker.on("completed", (job, result) => {
-    console.log(`[PDF Worker] Job ${job.id} completed:`, result);
-  });
-
-  worker.on("failed", (job, err) => {
-    console.error(`[PDF Worker] Job ${job?.id} failed:`, err.message);
-  });
-
-  worker.on("progress", (job, progress) => {
-    console.log(`[PDF Worker] Job ${job.id} progress: ${progress}%`);
-  });
-
-  worker.on("error", (err) => {
-    console.error("[PDF Worker] Worker error:", err);
-  });
-
-  return worker;
-}
-
-// Export singleton for direct import
-export const pdfToImageWorker = createPdfToImageWorker();
-```
-
----
-
-### Step 4: Create File Conversion Worker
-
-**File: `lib/queues/workers/file-conversion.worker.ts`**
-
-```typescript
-import { Job, Worker } from "bullmq";
-import { createRedisConnection } from "../connection";
-import prisma from "@/lib/prisma";
-import { getFile } from "@/lib/files/get-file";
-import { putFileServer } from "@/lib/files/put-file-server";
-import { pdfToImageQueue } from "../index";
-import { getExtensionFromContentType } from "@/lib/utils/get-content-type";
-
-// ============================================
-// TYPE DEFINITIONS
-// ============================================
-
 export type FileConversionPayload = {
   documentId: string;
   documentVersionId: string;
@@ -750,305 +222,674 @@ export type FileConversionPayload = {
   conversionType: "office" | "cad" | "keynote";
 };
 
-type FileConversionResult = {
-  success: boolean;
-  convertedFile?: string;
-  error?: string;
+// ============================================
+// VIDEO OPTIMIZATION
+// ============================================
+export type VideoOptimizationPayload = {
+  videoUrl: string;
+  teamId: string;
+  docId: string;
+  documentVersionId: string;
+  fileSize: number;
 };
 
 // ============================================
-// WORKER PROCESSOR
+// EXPORT VISITS
 // ============================================
-
-async function processFileConversion(
-  job: Job<FileConversionPayload>
-): Promise<FileConversionResult> {
-  const { documentId, documentVersionId, teamId, conversionType } = job.data;
-
-  console.log(`[Conversion Worker] Starting ${conversionType} conversion for: ${documentVersionId}`);
-
-  try {
-    // ----------------------------------------
-    // 1. Get document info
-    // ----------------------------------------
-    const document = await prisma.document.findUnique({
-      where: { id: documentId, teamId },
-      select: {
-        name: true,
-        versions: {
-          where: { id: documentVersionId },
-          select: {
-            file: true,
-            originalFile: true,
-            contentType: true,
-            storageType: true,
-            versionNumber: true,
-          },
-        },
-      },
-    });
-
-    if (!document || !document.versions[0]) {
-      throw new Error("Document or version not found");
-    }
-
-    const version = document.versions[0];
-    await job.updateProgress(10);
-
-    // ----------------------------------------
-    // 2. Get signed URL
-    // ----------------------------------------
-    const fileUrl = await getFile({
-      data: version.originalFile!,
-      type: version.storageType,
-    });
-
-    if (!fileUrl) {
-      throw new Error("Failed to get file URL");
-    }
-
-    await job.updateProgress(20);
-
-    // ----------------------------------------
-    // 3. Convert based on type
-    // ----------------------------------------
-    let conversionBuffer: Buffer;
-
-    if (conversionType === "office") {
-      // LibreOffice conversion
-      const formData = new FormData();
-      formData.append(
-        "downloadFrom",
-        JSON.stringify([{ url: fileUrl }])
-      );
-      formData.append("quality", "75");
-
-      const response = await fetch(
-        `${process.env.NEXT_PRIVATE_CONVERSION_BASE_URL}/forms/libreoffice/convert`,
-        {
-          method: "POST",
-          body: formData,
-          headers: {
-            Authorization: `Basic ${process.env.NEXT_PRIVATE_INTERNAL_AUTH_TOKEN}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(`LibreOffice conversion failed: ${response.status} - ${errorBody}`);
-      }
-
-      conversionBuffer = Buffer.from(await response.arrayBuffer());
-
-    } else if (conversionType === "cad" || conversionType === "keynote") {
-      // ConvertAPI conversion
-      const engine = conversionType === "cad" ? "cadconverter" : "iwork";
-      const inputFormat = getExtensionFromContentType(version.contentType!);
-
-      const tasksPayload = {
-        tasks: {
-          "import-file-v1": {
-            operation: "import/url",
-            url: fileUrl,
-            filename: document.name,
-          },
-          "convert-file-v1": {
-            operation: "convert",
-            input: ["import-file-v1"],
-            input_format: inputFormat,
-            output_format: "pdf",
-            engine,
-            ...(conversionType === "cad" && {
-              all_layouts: true,
-              auto_zoom: false,
-            }),
-          },
-          "export-file-v1": {
-            operation: "export/url",
-            input: ["convert-file-v1"],
-            inline: false,
-            archive_multiple_files: false,
-          },
-        },
-        redirect: true,
-      };
-
-      const response = await fetch(process.env.NEXT_PRIVATE_CONVERT_API_URL!, {
-        method: "POST",
-        body: JSON.stringify(tasksPayload),
-        headers: {
-          Authorization: `Bearer ${process.env.NEXT_PRIVATE_CONVERT_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(`ConvertAPI conversion failed: ${response.status} - ${errorBody}`);
-      }
-
-      conversionBuffer = Buffer.from(await response.arrayBuffer());
-    } else {
-      throw new Error(`Unknown conversion type: ${conversionType}`);
-    }
-
-    await job.updateProgress(60);
-
-    // ----------------------------------------
-    // 4. Save converted PDF to S3
-    // ----------------------------------------
-    const match = version.originalFile!.match(/(doc_[^\/]+)\//);
-    const docId = match ? match[1] : undefined;
-
-    const { type: storageType, data } = await putFileServer({
-      file: {
-        name: `${document.name}.pdf`,
-        type: "application/pdf",
-        buffer: conversionBuffer,
-      },
-      teamId,
-      docId,
-    });
-
-    if (!data || !storageType) {
-      throw new Error("Failed to save converted file");
-    }
-
-    await job.updateProgress(80);
-
-    // ----------------------------------------
-    // 5. Update document version
-    // ----------------------------------------
-    await prisma.documentVersion.update({
-      where: { id: documentVersionId },
-      data: {
-        file: data,
-        type: "pdf",
-        storageType,
-      },
-    });
-
-    await job.updateProgress(90);
-
-    // ----------------------------------------
-    // 6. Queue PDF to image conversion
-    // ----------------------------------------
-    await pdfToImageQueue.add(
-      "convert-pdf-to-image",
-      {
-        documentId,
-        documentVersionId,
-        teamId,
-        versionNumber: version.versionNumber,
-      },
-      {
-        jobId: `pdf-${documentVersionId}`,
-      }
-    );
-
-    await job.updateProgress(100);
-
-    console.log(`[Conversion Worker] Successfully converted ${conversionType} document`);
-
-    return {
-      success: true,
-      convertedFile: data,
-    };
-
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[Conversion Worker] Job ${job.id} failed:`, errorMessage);
-
-    return {
-      success: false,
-      error: errorMessage,
-    };
-  }
-}
+export type ExportVisitsPayload = {
+  type: "document" | "dataroom" | "dataroom-group";
+  teamId: string;
+  resourceId: string;
+  groupId?: string;
+  userId: string;
+  exportId: string;
+};
 
 // ============================================
-// WORKER INSTANCE
+// SCHEDULED EMAILS
 // ============================================
+export type ScheduledEmailPayload = {
+  emailType: "dataroom-trial-info" | "dataroom-trial-24h" | "dataroom-trial-expired" | "upgrade-checkin";
+  to: string;
+  name?: string;
+  teamId?: string;
+  useCase?: string;
+};
 
-export function createFileConversionWorker() {
-  const worker = new Worker<FileConversionPayload, FileConversionResult>(
-    "file-conversion",
-    processFileConversion,
-    {
-      connection: createRedisConnection(),
-      concurrency: 3,
-    }
-  );
+// ============================================
+// NOTIFICATIONS
+// ============================================
+export type DataroomNotificationPayload = {
+  dataroomId: string;
+  dataroomDocumentId: string;
+  senderUserId: string;
+  teamId: string;
+};
 
-  worker.on("completed", (job, result) => {
-    console.log(`[Conversion Worker] Job ${job.id} completed:`, result.success);
-  });
+export type ConversationNotificationPayload = {
+  dataroomId: string;
+  messageId: string;
+  conversationId: string;
+  teamId: string;
+  senderUserId: string;
+  notificationType: "viewer" | "team-member";
+};
 
-  worker.on("failed", (job, err) => {
-    console.error(`[Conversion Worker] Job ${job?.id} failed:`, err.message);
-  });
+// ============================================
+// BILLING
+// ============================================
+export type PauseResumeNotificationPayload = {
+  teamId: string;
+};
 
-  return worker;
-}
+export type AutomaticUnpausePayload = {
+  teamId: string;
+};
 
-export const fileConversionWorker = createFileConversionWorker();
+// ============================================
+// COMMON
+// ============================================
+export type JobTags = string[];
+
+export type DelayedJobOptions = {
+  delay?: number; // milliseconds
+  jobId?: string;
+  tags?: JobTags;
+};
 ```
 
 ---
 
-### Step 5: Create Worker Entry Point
+### Step 3: Queue Definitions
+
+**File: `lib/queues/index.ts`**
+
+```typescript
+import { Queue, QueueEvents } from "bullmq";
+import { getRedisConnection } from "./connection";
+import type {
+  PdfToImagePayload,
+  FileConversionPayload,
+  VideoOptimizationPayload,
+  ExportVisitsPayload,
+  ScheduledEmailPayload,
+  DataroomNotificationPayload,
+  ConversationNotificationPayload,
+  PauseResumeNotificationPayload,
+  AutomaticUnpausePayload,
+  DelayedJobOptions,
+} from "./types";
+
+const connection = getRedisConnection();
+
+// ============================================
+// QUEUE DEFINITIONS
+// ============================================
+
+// PDF to Image conversion (most critical)
+export const pdfToImageQueue = new Queue<PdfToImagePayload>("pdf-to-image", {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 1000 },
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 50 },
+  },
+});
+
+// Office/CAD/Keynote to PDF conversion
+export const fileConversionQueue = new Queue<FileConversionPayload>("file-conversion", {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 50 },
+  },
+});
+
+// Video optimization
+export const videoOptimizationQueue = new Queue<VideoOptimizationPayload>("video-optimization", {
+  connection,
+  defaultJobOptions: {
+    attempts: 2,
+    backoff: { type: "exponential", delay: 5000 },
+    removeOnComplete: { count: 50 },
+    removeOnFail: { count: 20 },
+  },
+});
+
+// Export visits to CSV
+export const exportQueue = new Queue<ExportVisitsPayload>("export-visits", {
+  connection,
+  defaultJobOptions: {
+    attempts: 2,
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 50 },
+  },
+});
+
+// Scheduled/delayed emails
+export const emailQueue = new Queue<ScheduledEmailPayload>("scheduled-email", {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5000 },
+    removeOnComplete: { count: 200 },
+    removeOnFail: { count: 50 },
+  },
+});
+
+// Dataroom change notifications
+export const dataroomNotificationQueue = new Queue<DataroomNotificationPayload>("dataroom-notification", {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 50 },
+  },
+});
+
+// Conversation notifications
+export const conversationNotificationQueue = new Queue<ConversationNotificationPayload>("conversation-notification", {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 50 },
+  },
+});
+
+// Billing - pause resume notifications
+export const pauseResumeQueue = new Queue<PauseResumeNotificationPayload>("pause-resume-notification", {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    removeOnComplete: { count: 50 },
+    removeOnFail: { count: 20 },
+  },
+});
+
+// Billing - automatic unpause
+export const automaticUnpauseQueue = new Queue<AutomaticUnpausePayload>("automatic-unpause", {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    removeOnComplete: { count: 50 },
+    removeOnFail: { count: 20 },
+  },
+});
+
+// Cleanup jobs (scheduled/cron)
+export const cleanupQueue = new Queue("cleanup", {
+  connection,
+  defaultJobOptions: {
+    attempts: 2,
+    removeOnComplete: { count: 10 },
+  },
+});
+
+// ============================================
+// QUEUE EVENTS (for monitoring)
+// ============================================
+
+export const pdfToImageEvents = new QueueEvents("pdf-to-image", { connection });
+export const fileConversionEvents = new QueueEvents("file-conversion", { connection });
+export const exportEvents = new QueueEvents("export-visits", { connection });
+
+// ============================================
+// HELPER: ADD JOB WITH TAGS SUPPORT
+// ============================================
+
+// Store tags in job data for later filtering (BullMQ doesn't have native tags)
+export async function addJobWithTags<T extends object>(
+  queue: Queue<T>,
+  name: string,
+  data: T,
+  options: DelayedJobOptions = {}
+) {
+  const { delay, jobId, tags } = options;
+
+  // Embed tags in the data for later retrieval
+  const dataWithTags = { ...data, _tags: tags || [] };
+
+  return queue.add(name, dataWithTags as T, {
+    delay,
+    jobId,
+  });
+}
+
+// ============================================
+// RE-EXPORT TYPES
+// ============================================
+
+export * from "./types";
+```
+
+---
+
+### Step 4: Job Management Helpers (Replaces `runs.list`, `runs.cancel`)
+
+**File: `lib/queues/helpers.ts`**
+
+```typescript
+import { Queue, Job } from "bullmq";
+import {
+  dataroomNotificationQueue,
+  conversationNotificationQueue,
+  exportQueue,
+} from "./index";
+
+type JobStatus = "completed" | "failed" | "delayed" | "active" | "waiting" | "paused";
+
+// ============================================
+// GET JOBS BY TAG
+// Replaces: runs.list({ tag: [...], status: [...] })
+// ============================================
+
+export async function getJobsByTag(
+  queue: Queue,
+  tag: string,
+  statuses: JobStatus[] = ["delayed", "waiting"]
+): Promise<Job[]> {
+  const jobs = await queue.getJobs(statuses);
+
+  return jobs.filter((job) => {
+    const tags = (job.data as any)?._tags || [];
+    return tags.includes(tag);
+  });
+}
+
+// ============================================
+// CANCEL JOBS BY TAG
+// Replaces: runs.cancel() for multiple jobs
+// ============================================
+
+export async function cancelJobsByTag(
+  queue: Queue,
+  tag: string,
+  statuses: JobStatus[] = ["delayed", "waiting"]
+): Promise<number> {
+  const jobs = await getJobsByTag(queue, tag, statuses);
+
+  let cancelledCount = 0;
+  for (const job of jobs) {
+    try {
+      await job.remove();
+      cancelledCount++;
+    } catch (error) {
+      // Job may have already been processed
+      console.warn(`Failed to cancel job ${job.id}:`, error);
+    }
+  }
+
+  return cancelledCount;
+}
+
+// ============================================
+// CANCEL SINGLE JOB BY ID
+// Replaces: runs.cancel(runId)
+// ============================================
+
+export async function cancelJobById(queue: Queue, jobId: string): Promise<boolean> {
+  try {
+    const job = await queue.getJob(jobId);
+    if (job) {
+      await job.remove();
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error(`Failed to cancel job ${jobId}:`, error);
+    return false;
+  }
+}
+
+// ============================================
+// GET JOB STATUS
+// ============================================
+
+export async function getJobStatus(queue: Queue, jobId: string) {
+  const job = await queue.getJob(jobId);
+  if (!job) return null;
+
+  const state = await job.getState();
+  const progress = job.progress;
+
+  return {
+    id: job.id,
+    state,
+    progress,
+    data: job.data,
+    failedReason: job.failedReason,
+    processedOn: job.processedOn,
+    finishedOn: job.finishedOn,
+  };
+}
+
+// ============================================
+// SPECIALIZED HELPERS
+// ============================================
+
+// For dataroom notifications - cancel pending notifications
+export async function cancelPendingDataroomNotifications(dataroomId: string) {
+  return cancelJobsByTag(dataroomNotificationQueue, `dataroom_${dataroomId}`);
+}
+
+// For conversation notifications - cancel pending notifications
+export async function cancelPendingConversationNotifications(conversationId: string) {
+  return cancelJobsByTag(conversationNotificationQueue, `conversation_${conversationId}`);
+}
+
+// For export jobs - cancel by export ID
+export async function cancelExportJob(exportId: string) {
+  return cancelJobById(exportQueue, exportId);
+}
+
+// ============================================
+// QUEUE STATS
+// ============================================
+
+export async function getQueueStats(queue: Queue) {
+  const [waiting, active, completed, failed, delayed] = await Promise.all([
+    queue.getWaitingCount(),
+    queue.getActiveCount(),
+    queue.getCompletedCount(),
+    queue.getFailedCount(),
+    queue.getDelayedCount(),
+  ]);
+
+  return { waiting, active, completed, failed, delayed };
+}
+```
+
+---
+
+### Step 5: Progress Tracking (Replaces Trigger.dev Realtime Hooks)
+
+**File: `lib/progress/index.ts`**
+
+```typescript
+import { Job, Queue } from "bullmq";
+
+export type ProgressStatus = {
+  state: "QUEUED" | "EXECUTING" | "COMPLETED" | "FAILED";
+  progress: number;
+  text: string;
+};
+
+// Convert BullMQ job state to our status format
+export function jobStateToStatus(state: string): ProgressStatus["state"] {
+  switch (state) {
+    case "waiting":
+    case "delayed":
+      return "QUEUED";
+    case "active":
+      return "EXECUTING";
+    case "completed":
+      return "COMPLETED";
+    case "failed":
+      return "FAILED";
+    default:
+      return "QUEUED";
+  }
+}
+
+// Get progress for a specific job
+export async function getJobProgress(
+  queue: Queue,
+  jobId: string
+): Promise<ProgressStatus | null> {
+  const job = await queue.getJob(jobId);
+  if (!job) return null;
+
+  const state = await job.getState();
+  const progress = typeof job.progress === "number" ? job.progress : 0;
+  const progressData = typeof job.progress === "object" ? job.progress : null;
+
+  return {
+    state: jobStateToStatus(state),
+    progress: progressData?.progress ?? progress,
+    text: progressData?.text ?? getDefaultText(state, progress),
+  };
+}
+
+function getDefaultText(state: string, progress: number): string {
+  switch (state) {
+    case "waiting":
+    case "delayed":
+      return "Waiting in queue...";
+    case "active":
+      return `Processing... ${progress}%`;
+    case "completed":
+      return "Processing complete";
+    case "failed":
+      return "Processing failed";
+    default:
+      return "Initializing...";
+  }
+}
+
+// Update progress from within a worker
+export async function updateJobProgress(
+  job: Job,
+  progress: number,
+  text: string
+) {
+  await job.updateProgress({ progress, text });
+}
+```
+
+**File: `lib/progress/use-job-progress.ts`** (Replaces `@trigger.dev/react-hooks`)
+
+```typescript
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+
+interface JobProgressStatus {
+  state: "QUEUED" | "EXECUTING" | "COMPLETED" | "FAILED";
+  progress: number;
+  text: string;
+}
+
+interface UseJobProgressOptions {
+  enabled?: boolean;
+  pollingInterval?: number;
+}
+
+export function useJobProgress(
+  queueName: string,
+  jobId: string | undefined,
+  options: UseJobProgressOptions = {}
+) {
+  const { enabled = true, pollingInterval = 2000 } = options;
+
+  const [status, setStatus] = useState<JobProgressStatus>({
+    state: "QUEUED",
+    progress: 0,
+    text: "Initializing...",
+  });
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchProgress = useCallback(async () => {
+    if (!jobId || !enabled) return;
+
+    try {
+      const response = await fetch(
+        `/api/jobs/progress?queue=${queueName}&jobId=${jobId}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch job progress");
+      }
+
+      const data = await response.json();
+      setStatus(data);
+      setError(null);
+
+      // Stop polling if job is complete or failed
+      return data.state === "COMPLETED" || data.state === "FAILED";
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error("Unknown error"));
+      return false;
+    }
+  }, [queueName, jobId, enabled]);
+
+  useEffect(() => {
+    if (!enabled || !jobId) return;
+
+    let timeoutId: NodeJS.Timeout;
+    let stopped = false;
+
+    const poll = async () => {
+      if (stopped) return;
+
+      const shouldStop = await fetchProgress();
+
+      if (!stopped && !shouldStop) {
+        timeoutId = setTimeout(poll, pollingInterval);
+      }
+    };
+
+    poll();
+
+    return () => {
+      stopped = true;
+      clearTimeout(timeoutId);
+    };
+  }, [fetchProgress, enabled, jobId, pollingInterval]);
+
+  return { status, error };
+}
+
+// Hook specifically for document version progress (drop-in replacement)
+export function useDocumentProgressStatus(
+  documentVersionId: string,
+  _publicAccessToken: string | undefined // Kept for API compatibility, not used
+) {
+  const { status, error } = useJobProgress(
+    "pdf-to-image",
+    documentVersionId ? `pdf-${documentVersionId}` : undefined,
+    { enabled: !!documentVersionId }
+  );
+
+  return {
+    status,
+    error,
+    run: status.state !== "QUEUED" ? { id: `pdf-${documentVersionId}` } : undefined,
+  };
+}
+```
+
+**File: `pages/api/jobs/progress.ts`** (New API endpoint for progress polling)
+
+```typescript
+import { NextApiRequest, NextApiResponse } from "next";
+import {
+  pdfToImageQueue,
+  fileConversionQueue,
+  videoOptimizationQueue,
+  exportQueue,
+} from "@/lib/queues";
+import { getJobProgress } from "@/lib/progress";
+import { Queue } from "bullmq";
+
+const queueMap: Record<string, Queue> = {
+  "pdf-to-image": pdfToImageQueue,
+  "file-conversion": fileConversionQueue,
+  "video-optimization": videoOptimizationQueue,
+  "export-visits": exportQueue,
+};
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const { queue: queueName, jobId } = req.query as {
+    queue: string;
+    jobId: string;
+  };
+
+  if (!queueName || !jobId) {
+    return res.status(400).json({ error: "Missing queue or jobId" });
+  }
+
+  const queue = queueMap[queueName];
+  if (!queue) {
+    return res.status(400).json({ error: "Invalid queue name" });
+  }
+
+  const progress = await getJobProgress(queue, jobId);
+
+  if (!progress) {
+    return res.status(404).json({ error: "Job not found" });
+  }
+
+  return res.status(200).json(progress);
+}
+```
+
+---
+
+### Step 6: Worker Entry Point
 
 **File: `workers/index.ts`**
 
 ```typescript
-/**
- * Papermark Background Workers
- *
- * This file starts all BullMQ workers for background job processing.
- * Run with: npm run workers
- */
-
 import "dotenv/config";
 
-// Import workers (they self-register on import)
-import { pdfToImageWorker } from "../lib/queues/workers/pdf-to-image.worker";
-import { fileConversionWorker } from "../lib/queues/workers/file-conversion.worker";
+// Import all worker creators
+import { createPdfToImageWorker } from "../lib/queues/workers/pdf-to-image.worker";
+import { createFileConversionWorker } from "../lib/queues/workers/file-conversion.worker";
+import { createVideoOptimizationWorker } from "../lib/queues/workers/video-optimization.worker";
+import { createExportVisitsWorker } from "../lib/queues/workers/export-visits.worker";
+import { createScheduledEmailWorker } from "../lib/queues/workers/scheduled-email.worker";
+import { createDataroomNotificationWorker, createConversationNotificationWorker } from "../lib/queues/workers/notification.worker";
+import { createPauseResumeWorker, createAutomaticUnpauseWorker } from "../lib/queues/workers/billing.worker";
+import { createCleanupWorker, scheduleCleanupJob } from "../lib/queues/workers/cleanup.worker";
 
-// ============================================
-// STARTUP
-// ============================================
-
-console.log("=".repeat(50));
+console.log("=".repeat(60));
 console.log("  PAPERMARK BACKGROUND WORKERS");
-console.log("=".repeat(50));
+console.log("=".repeat(60));
 console.log("");
-console.log("  Active Workers:");
-console.log(`    - pdf-to-image (concurrency: 5)`);
-console.log(`    - file-conversion (concurrency: 3)`);
-console.log("");
+
+// Create all workers
+const workers = [
+  createPdfToImageWorker(),
+  createFileConversionWorker(),
+  createVideoOptimizationWorker(),
+  createExportVisitsWorker(),
+  createScheduledEmailWorker(),
+  createDataroomNotificationWorker(),
+  createConversationNotificationWorker(),
+  createPauseResumeWorker(),
+  createAutomaticUnpauseWorker(),
+  createCleanupWorker(),
+];
+
+console.log(`  Started ${workers.length} workers`);
 console.log(`  Redis: ${process.env.REDIS_URL || "redis://localhost:6379"}`);
-console.log(`  App URL: ${process.env.NEXT_PUBLIC_BASE_URL}`);
 console.log("");
-console.log("=".repeat(50));
-console.log("  Waiting for jobs...");
-console.log("=".repeat(50));
+console.log("=".repeat(60));
 
-// ============================================
-// GRACEFUL SHUTDOWN
-// ============================================
+// Schedule cron jobs
+scheduleCleanupJob().catch(console.error);
 
-const workers = [pdfToImageWorker, fileConversionWorker];
-
+// Graceful shutdown
 async function shutdown(signal: string) {
-  console.log(`\n[Workers] ${signal} received, shutting down gracefully...`);
+  console.log(`\n[Workers] ${signal} received, shutting down...`);
 
   try {
     await Promise.all(workers.map((w) => w.close()));
-    console.log("[Workers] All workers closed successfully");
+    console.log("[Workers] All workers closed");
     process.exit(0);
   } catch (error) {
-    console.error("[Workers] Error during shutdown:", error);
+    console.error("[Workers] Shutdown error:", error);
     process.exit(1);
   }
 }
@@ -1056,13 +897,338 @@ async function shutdown(signal: string) {
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
-// Keep process alive
 process.stdin.resume();
 ```
 
 ---
 
-### Step 6: Update package.json
+## 5. Code Changes Required
+
+### 5.1 Update `lib/api/documents/process-document.ts`
+
+```typescript
+// REMOVE these imports:
+import {
+  convertCadToPdfTask,
+  convertFilesToPdfTask,
+  convertKeynoteToPdfTask,
+} from "@/lib/trigger/convert-files";
+import { processVideo } from "@/lib/trigger/optimize-video-files";
+import { convertPdfToImageRoute } from "@/lib/trigger/pdf-to-image-route";
+import { conversionQueue } from "@/lib/utils/trigger-utils";
+
+// ADD these imports:
+import {
+  pdfToImageQueue,
+  fileConversionQueue,
+  videoOptimizationQueue,
+  addJobWithTags,
+} from "@/lib/queues";
+```
+
+**Replace all `.trigger()` calls:**
+
+```typescript
+// Keynote (lines ~147-163)
+// BEFORE:
+await convertKeynoteToPdfTask.trigger({ ... }, { idempotencyKey: ..., tags: ..., queue: ... });
+
+// AFTER:
+await addJobWithTags(
+  fileConversionQueue,
+  "convert-keynote",
+  { documentId: document.id, documentVersionId: document.versions[0].id, teamId, conversionType: "keynote" },
+  { jobId: `keynote-${document.versions[0].id}`, tags: [`team_${teamId}`, `document_${document.id}`] }
+);
+
+// Office docs (lines ~164-182)
+// AFTER:
+await addJobWithTags(
+  fileConversionQueue,
+  "convert-office",
+  { documentId: document.id, documentVersionId: document.versions[0].id, teamId, conversionType: "office" },
+  { jobId: `office-${document.versions[0].id}`, tags: [`team_${teamId}`, `document_${document.id}`] }
+);
+
+// CAD (lines ~184-202)
+// AFTER:
+await addJobWithTags(
+  fileConversionQueue,
+  "convert-cad",
+  { documentId: document.id, documentVersionId: document.versions[0].id, teamId, conversionType: "cad" },
+  { jobId: `cad-${document.versions[0].id}`, tags: [`team_${teamId}`, `document_${document.id}`] }
+);
+
+// Video (lines ~204-228)
+// AFTER:
+await addJobWithTags(
+  videoOptimizationQueue,
+  "process-video",
+  {
+    videoUrl: key,
+    teamId,
+    docId: key.split("/")[1],
+    documentVersionId: document.versions[0].id,
+    fileSize: fileSize || 0,
+  },
+  { jobId: `video-${document.versions[0].id}`, tags: [`team_${teamId}`, `document_${document.id}`] }
+);
+
+// PDF (lines ~231-249)
+// AFTER:
+await addJobWithTags(
+  pdfToImageQueue,
+  "convert-pdf-to-image",
+  { documentId: document.id, documentVersionId: document.versions[0].id, teamId },
+  { jobId: `pdf-${document.versions[0].id}`, tags: [`team_${teamId}`, `document_${document.id}`] }
+);
+```
+
+### 5.2 Update `pages/api/teams/[teamId]/export-jobs.ts`
+
+```typescript
+// REMOVE:
+import { exportVisitsTask } from "@/lib/trigger/export-visits";
+
+// ADD:
+import { exportQueue, addJobWithTags } from "@/lib/queues";
+
+// REPLACE trigger call (line ~70):
+// BEFORE:
+const handle = await exportVisitsTask.trigger({ ... }, { idempotencyKey: ..., tags: ... });
+
+// AFTER:
+const job = await addJobWithTags(
+  exportQueue,
+  "export-visits",
+  { type, teamId, resourceId, groupId, userId, exportId: exportJob.id },
+  { jobId: exportJob.id, tags: [`team_${teamId}`, `user_${userId}`, `export_${exportJob.id}`] }
+);
+
+// Update job with BullMQ job ID instead of trigger run ID
+const updatedJob = await jobStore.updateJob(exportJob.id, {
+  triggerRunId: job.id, // Still works, just different ID format
+});
+```
+
+### 5.3 Update `pages/api/teams/[teamId]/export-jobs/[exportId].ts`
+
+```typescript
+// REMOVE:
+import { runs } from "@trigger.dev/sdk/v3";
+
+// ADD:
+import { cancelExportJob } from "@/lib/queues/helpers";
+
+// REPLACE runs.cancel (line ~94):
+// BEFORE:
+await runs.cancel(exportJob.triggerRunId);
+
+// AFTER:
+await cancelExportJob(exportJob.id);
+```
+
+### 5.4 Update `pages/api/teams/[teamId]/datarooms/trial.ts`
+
+```typescript
+// REMOVE:
+import {
+  sendDataroomTrial24hReminderEmailTask,
+  sendDataroomTrialExpiredEmailTask,
+  sendDataroomTrialInfoEmailTask,
+} from "@/lib/trigger/send-scheduled-email";
+
+// ADD:
+import { emailQueue, addJobWithTags } from "@/lib/queues";
+
+// Helper to convert delay strings to milliseconds
+function parseDelay(delay: string): number {
+  const match = delay.match(/^(\d+)([dhms])$/);
+  if (!match) return 0;
+  const [, num, unit] = match;
+  const multipliers: Record<string, number> = {
+    d: 24 * 60 * 60 * 1000,
+    h: 60 * 60 * 1000,
+    m: 60 * 1000,
+    s: 1000,
+  };
+  return parseInt(num) * (multipliers[unit] || 0);
+}
+
+// REPLACE trigger calls (lines ~115-132):
+// BEFORE:
+waitUntil(sendDataroomTrialInfoEmailTask.trigger({ to: email!, useCase }, { delay: "1d" }));
+
+// AFTER:
+waitUntil(
+  addJobWithTags(
+    emailQueue,
+    "dataroom-trial-info",
+    { emailType: "dataroom-trial-info", to: email!, useCase },
+    { delay: parseDelay("1d") }
+  )
+);
+waitUntil(
+  addJobWithTags(
+    emailQueue,
+    "dataroom-trial-24h",
+    { emailType: "dataroom-trial-24h", to: email!, name: fullName.split(" ")[0], teamId },
+    { delay: parseDelay("6d") }
+  )
+);
+waitUntil(
+  addJobWithTags(
+    emailQueue,
+    "dataroom-trial-expired",
+    { emailType: "dataroom-trial-expired", to: email!, name: fullName.split(" ")[0], teamId },
+    { delay: parseDelay("7d") }
+  )
+);
+```
+
+### 5.5 Update `pages/api/teams/[teamId]/datarooms/[id]/documents/index.ts`
+
+```typescript
+// REMOVE:
+import { runs } from "@trigger.dev/sdk/v3";
+import { sendDataroomChangeNotificationTask } from "@/lib/trigger/dataroom-change-notification";
+
+// ADD:
+import { dataroomNotificationQueue, addJobWithTags } from "@/lib/queues";
+import { cancelPendingDataroomNotifications } from "@/lib/queues/helpers";
+
+// REPLACE runs.list + runs.cancel + trigger (lines ~179-208):
+// BEFORE:
+const allRuns = await runs.list({ taskIdentifier: [...], tag: [...], status: [...] });
+await Promise.all(allRuns.data.map((run) => runs.cancel(run.id)));
+waitUntil(sendDataroomChangeNotificationTask.trigger({ ... }, { delay: new Date(...) }));
+
+// AFTER:
+await cancelPendingDataroomNotifications(dataroomId);
+waitUntil(
+  addJobWithTags(
+    dataroomNotificationQueue,
+    "dataroom-change",
+    { dataroomId, dataroomDocumentId: document.id, senderUserId: userId, teamId },
+    {
+      jobId: `dataroom-notif-${dataroomId}-${document.id}`,
+      delay: 10 * 60 * 1000, // 10 minutes
+      tags: [`team_${teamId}`, `dataroom_${dataroomId}`],
+    }
+  )
+);
+```
+
+### 5.6 Update `ee/features/conversations/api/conversations-route.ts`
+
+```typescript
+// REMOVE:
+import { runs } from "@trigger.dev/sdk/v3";
+import { sendConversationTeamMemberNotificationTask } from "../lib/trigger/conversation-message-notification";
+
+// ADD:
+import { conversationNotificationQueue, addJobWithTags } from "@/lib/queues";
+import { cancelPendingConversationNotifications } from "@/lib/queues/helpers";
+
+// REPLACE all instances of runs.list + runs.cancel + trigger:
+// BEFORE:
+const allRuns = await runs.list({ ... });
+await Promise.all(allRuns.data.map((run) => runs.cancel(run.id)));
+waitUntil(sendConversationTeamMemberNotificationTask.trigger({ ... }));
+
+// AFTER:
+await cancelPendingConversationNotifications(conversation.id);
+waitUntil(
+  addJobWithTags(
+    conversationNotificationQueue,
+    "conversation-team-member",
+    {
+      dataroomId,
+      messageId: conversation.messages[0].id,
+      conversationId: conversation.id,
+      senderUserId: viewerId,
+      teamId: team.id,
+      notificationType: "team-member",
+    },
+    {
+      delay: 5 * 60 * 1000, // 5 minutes
+      tags: [`team_${team.id}`, `conversation_${conversation.id}`],
+    }
+  )
+);
+```
+
+### 5.7 Update `ee/features/billing/cancellation/api/pause-route.ts`
+
+```typescript
+// REMOVE:
+import { sendPauseResumeNotificationTask } from "../lib/trigger/pause-resume-notification";
+import { automaticUnpauseTask } from "../lib/trigger/unpause-task";
+
+// ADD:
+import { pauseResumeQueue, automaticUnpauseQueue, addJobWithTags } from "@/lib/queues";
+
+// REPLACE trigger calls (lines ~104-130):
+// BEFORE:
+waitUntil(Promise.all([
+  sendPauseResumeNotificationTask.trigger({ teamId }, { delay: reminderAt, ... }),
+  automaticUnpauseTask.trigger({ teamId }, { delay: pauseEndsAt, ... }),
+]));
+
+// AFTER:
+const reminderDelay = reminderAt.getTime() - Date.now();
+const unpauseDelay = pauseEndsAt.getTime() - Date.now();
+
+waitUntil(Promise.all([
+  addJobWithTags(
+    pauseResumeQueue,
+    "pause-resume-reminder",
+    { teamId },
+    { delay: reminderDelay, jobId: `pause-resume-${teamId}`, tags: [`team_${teamId}`] }
+  ),
+  addJobWithTags(
+    automaticUnpauseQueue,
+    "automatic-unpause",
+    { teamId },
+    { delay: unpauseDelay, jobId: `auto-unpause-${teamId}`, tags: [`team_${teamId}`] }
+  ),
+]));
+```
+
+### 5.8 Update `ee/stripe/webhooks/checkout-session-completed.ts`
+
+```typescript
+// REMOVE:
+import { sendUpgradeOneMonthCheckinEmailTask } from "@/lib/trigger/send-scheduled-email";
+
+// ADD:
+import { emailQueue, addJobWithTags } from "@/lib/queues";
+
+// REPLACE trigger call (lines ~140-151):
+// BEFORE:
+waitUntil(sendUpgradeOneMonthCheckinEmailTask.trigger({ ... }, { delay: "40d" }));
+
+// AFTER:
+waitUntil(
+  addJobWithTags(
+    emailQueue,
+    "upgrade-checkin",
+    { emailType: "upgrade-checkin", to: team.users[0].user.email!, name: team.users[0].user.name!, teamId },
+    { delay: 40 * 24 * 60 * 60 * 1000 } // 40 days in ms
+  )
+);
+```
+
+### 5.9 Update `lib/utils/use-progress-status.ts`
+
+Replace entire file content with:
+
+```typescript
+// Re-export from new location for backwards compatibility
+export { useDocumentProgressStatus } from "@/lib/progress/use-job-progress";
+```
+
+### 5.10 Update `package.json`
 
 ```json
 {
@@ -1078,178 +1244,111 @@ process.stdin.resume();
 }
 ```
 
+### 5.11 Update `docker-compose.yml`
+
+```yaml
+services:
+  app:
+    build: .
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379
+
+  workers:
+    build: .
+    command: npm run workers
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379
+
+  postgres:
+    image: postgres:16-alpine
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  postgres-data:
+  redis-data:
+```
+
 ---
 
-## 6. Code Changes Required
+## 6. Feature Parity Mappings
 
-### 6.1 Update process-document.ts
-
-**File: `lib/api/documents/process-document.ts`**
-
-Replace Trigger.dev imports and calls with BullMQ:
-
-```typescript
-// BEFORE (lines 8-16):
-import {
-  convertCadToPdfTask,
-  convertFilesToPdfTask,
-  convertKeynoteToPdfTask,
-} from "@/lib/trigger/convert-files";
-import { processVideo } from "@/lib/trigger/optimize-video-files";
-import { convertPdfToImageRoute } from "@/lib/trigger/pdf-to-image-route";
-import { conversionQueue } from "@/lib/utils/trigger-utils";
-
-// AFTER:
-import { pdfToImageQueue, fileConversionQueue, videoOptimizationQueue } from "@/lib/queues";
-```
-
-```typescript
-// BEFORE (lines 142-163) - Keynote:
-if (type === "slides" && (contentType === "application/vnd.apple.keynote" || ...)) {
-  await convertKeynoteToPdfTask.trigger(
-    { documentId: document.id, documentVersionId: document.versions[0].id, teamId },
-    { idempotencyKey: `${teamId}-${document.versions[0].id}-keynote`, ... }
-  );
-}
-
-// AFTER:
-if (type === "slides" && (contentType === "application/vnd.apple.keynote" || ...)) {
-  await fileConversionQueue.add(
-    "convert-keynote",
-    {
-      documentId: document.id,
-      documentVersionId: document.versions[0].id,
-      teamId,
-      conversionType: "keynote",
-    },
-    { jobId: `keynote-${document.versions[0].id}` }
-  );
-}
-```
-
-```typescript
-// BEFORE (lines 164-182) - Office docs:
-else if (type === "docs" || type === "slides") {
-  await convertFilesToPdfTask.trigger(
-    { documentId: document.id, documentVersionId: document.versions[0].id, teamId },
-    { idempotencyKey: `${teamId}-${document.versions[0].id}-docs`, ... }
-  );
-}
-
-// AFTER:
-else if (type === "docs" || type === "slides") {
-  await fileConversionQueue.add(
-    "convert-office",
-    {
-      documentId: document.id,
-      documentVersionId: document.versions[0].id,
-      teamId,
-      conversionType: "office",
-    },
-    { jobId: `office-${document.versions[0].id}` }
-  );
-}
-```
-
-```typescript
-// BEFORE (lines 184-202) - CAD:
-if (type === "cad") {
-  await convertCadToPdfTask.trigger(...);
-}
-
-// AFTER:
-if (type === "cad") {
-  await fileConversionQueue.add(
-    "convert-cad",
-    {
-      documentId: document.id,
-      documentVersionId: document.versions[0].id,
-      teamId,
-      conversionType: "cad",
-    },
-    { jobId: `cad-${document.versions[0].id}` }
-  );
-}
-```
-
-```typescript
-// BEFORE (lines 231-249) - PDF:
-if (type === "pdf") {
-  await convertPdfToImageRoute.trigger(
-    { documentId: document.id, documentVersionId: document.versions[0].id, teamId },
-    { idempotencyKey: `${teamId}-${document.versions[0].id}`, ... }
-  );
-}
-
-// AFTER:
-if (type === "pdf") {
-  await pdfToImageQueue.add(
-    "convert-pdf-to-image",
-    {
-      documentId: document.id,
-      documentVersionId: document.versions[0].id,
-      teamId,
-    },
-    { jobId: `pdf-${document.versions[0].id}` }
-  );
-}
-```
-
-### 6.2 Update versions/index.ts
-
-**File: `pages/api/teams/[teamId]/documents/[id]/versions/index.ts`**
-
-Same pattern - replace Trigger.dev with BullMQ queue.
-
-### 6.3 Update agreement.ts
-
-**File: `pages/api/teams/[teamId]/documents/agreement.ts`**
-
-Same pattern - replace Trigger.dev with BullMQ queue.
+| Trigger.dev Feature | BullMQ Equivalent |
+|---------------------|-------------------|
+| `task()` | `Worker` + queue |
+| `.trigger()` | `queue.add()` or `addJobWithTags()` |
+| `delay: "1d"` | `{ delay: ms }` option |
+| `delay: new Date(...)` | `{ delay: date.getTime() - Date.now() }` |
+| `idempotencyKey` | `{ jobId: key }` |
+| `tags: [...]` | Embed in job data as `_tags` |
+| `runs.list({ tag, status })` | `getJobsByTag()` helper |
+| `runs.cancel(id)` | `job.remove()` or `cancelJobById()` |
+| `metadata.set()` | `job.updateProgress({ progress, text })` |
+| `useRealtimeRunsWithTag` | Polling hook `useJobProgress()` |
+| `schedules.task({ cron })` | `queue.add(..., { repeat: { pattern } })` |
+| `auth.createPublicToken` | Not needed (use session auth for polling) |
+| `concurrencyKey` | Worker `concurrency` option |
+| `queue: { name, concurrencyLimit }` | Queue-level config |
 
 ---
 
 ## 7. Testing Checklist
 
-### Pre-Migration
-
-- [ ] Backup database
-- [ ] Note current document states
-
 ### Infrastructure
-
 - [ ] Redis container running: `docker-compose up -d redis`
-- [ ] Redis accessible: `redis-cli ping` returns `PONG`
+- [ ] `redis-cli ping` returns `PONG`
 - [ ] Environment variables set in `.env`
 
-### Code Changes
+### Workers
+- [ ] `npm run workers` starts without errors
+- [ ] All 10 workers register successfully
+- [ ] Cleanup cron job scheduled
 
-- [ ] `lib/queues/connection.ts` created
-- [ ] `lib/queues/index.ts` created
-- [ ] `lib/queues/workers/pdf-to-image.worker.ts` created
-- [ ] `lib/queues/workers/file-conversion.worker.ts` created
-- [ ] `workers/index.ts` created
-- [ ] `package.json` scripts updated
-- [ ] `process-document.ts` updated
-- [ ] `versions/index.ts` updated
-- [ ] `agreement.ts` updated
+### Document Processing
+- [ ] Upload PDF → pages convert ✓
+- [ ] Upload DOCX → converts to PDF → pages convert ✓
+- [ ] Upload PPTX (Keynote) → converts to PDF → pages convert ✓
+- [ ] Upload CAD file → converts to PDF → pages convert ✓
+- [ ] Upload video → optimizes (or skips if >500MB) ✓
+- [ ] Progress updates show in UI ✓
 
-### Runtime Tests
+### Export
+- [ ] Export document visits → CSV generated
+- [ ] Export dataroom visits → CSV generated
+- [ ] Cancel export → job removed
 
-- [ ] Workers start: `npm run workers`
-- [ ] No connection errors in logs
-- [ ] Upload a new PDF document
-- [ ] Job appears in worker logs
-- [ ] Pages convert successfully
-- [ ] DocumentVersion.hasPages = true
-- [ ] Preview works in UI
+### Notifications
+- [ ] Add document to dataroom → notification sent after 10min delay
+- [ ] Conversation message → team notification sent after 5min delay
+- [ ] Cancellation of pending notifications works
 
-### Edge Cases
+### Billing
+- [ ] Pause subscription → reminder scheduled
+- [ ] Pause subscription → auto-unpause scheduled
+- [ ] Delays work correctly (test with short delays)
 
-- [ ] Large PDF (100+ pages)
-- [ ] Multi-page progress updates work
-- [ ] Failed conversion retries
-- [ ] Worker restart recovers pending jobs
+### Scheduled Emails
+- [ ] Trial info email (1 day delay)
+- [ ] Trial 24h reminder (6 day delay)
+- [ ] Trial expired (7 day delay)
+- [ ] Upgrade checkin (40 day delay)
+
+### Cleanup
+- [ ] Cron runs at 2 AM UTC
+- [ ] Expired blobs deleted
 
 ---
 
@@ -1257,7 +1356,7 @@ Same pattern - replace Trigger.dev with BullMQ queue.
 
 ```bash
 # Start Redis
-docker-compose -f docker-compose.local.yml up -d redis
+docker-compose up -d redis
 
 # Start workers (development)
 npm run workers:watch
@@ -1269,33 +1368,36 @@ npm run dev:full
 redis-cli ping
 redis-cli keys "bull:*"
 
-# Monitor queues
-redis-cli monitor
+# Monitor specific queue
+redis-cli monitor | grep "pdf-to-image"
+
+# Check queue stats
+redis-cli hgetall "bull:pdf-to-image:id"
 ```
 
 ---
 
-## Migration Timeline
+## Files to Delete After Migration
 
-| Step | Task | Time |
-|------|------|------|
-| 1 | Install dependencies | 5 min |
-| 2 | Create queue infrastructure | 30 min |
-| 3 | Create PDF worker | 1 hour |
-| 4 | Create file conversion worker | 1 hour |
-| 5 | Update process-document.ts | 30 min |
-| 6 | Update other trigger points | 30 min |
-| 7 | Testing | 1-2 hours |
-| **Total** | | **~5-6 hours** |
+Once migration is complete and tested:
+
+```
+lib/trigger/                              # All trigger job definitions
+ee/features/*/lib/trigger/                # EE trigger jobs
+lib/utils/trigger-utils.ts
+lib/utils/generate-trigger-auth-token.ts
+lib/utils/generate-trigger-status.ts      # If not needed
+trigger.config.ts
+```
 
 ---
 
 ## Rollback Plan
 
 If issues occur:
+1. Stop workers: `Ctrl+C` or `docker-compose stop workers`
+2. Revert code: `git checkout -- .`
+3. Remove BullMQ: `npm uninstall bullmq ioredis`
+4. Restart with Trigger.dev
 
-1. Stop workers: `Ctrl+C`
-2. Revert code changes: `git checkout -- lib/api/documents/process-document.ts`
-3. Restart with Trigger.dev: `npx trigger.dev@latest dev`
-
-The Trigger.dev code remains in `lib/trigger/` and can be reactivated.
+The Trigger.dev code remains in `lib/trigger/` until final cleanup.

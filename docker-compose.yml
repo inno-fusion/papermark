@@ -20,6 +20,36 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis for BullMQ job queues
+  redis:
+    image: redis:7-alpine
+    container_name: papermark-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  # Gotenberg for LibreOffice document conversion (Office docs → PDF)
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: papermark-gotenberg
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--api-timeout=300s"
+      - "--libreoffice-disable-routes=false"
+
 volumes:
   postgres-data:
+    driver: local
+  redis-data:
     driver: local

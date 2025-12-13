@@ -6,14 +6,12 @@ import notion from "@/lib/notion";
 import { getNotionPageIdFromSlug } from "@/lib/notion/utils";
 import prisma from "@/lib/prisma";
 import {
-  convertCadToPdfTask,
-  convertFilesToPdfTask,
-  convertKeynoteToPdfTask,
-} from "@/lib/trigger/convert-files";
-import { processVideo } from "@/lib/trigger/optimize-video-files";
-import { convertPdfToImageRoute } from "@/lib/trigger/pdf-to-image-route";
+  addJobWithTags,
+  fileConversionQueue,
+  pdfToImageQueue,
+  videoOptimizationQueue,
+} from "@/lib/queues";
 import { getExtension } from "@/lib/utils";
-import { conversionQueue } from "@/lib/utils/trigger-utils";
 import { sendDocumentCreatedWebhook } from "@/lib/webhook/triggers/document-created";
 import { sendLinkCreatedWebhook } from "@/lib/webhook/triggers/link-created";
 
@@ -144,59 +142,62 @@ export const processDocument = async ({
     (contentType === "application/vnd.apple.keynote" ||
       contentType === "application/x-iwork-keynote-sffkey")
   ) {
-    await convertKeynoteToPdfTask.trigger(
+    await addJobWithTags(
+      fileConversionQueue,
+      "keynote-to-pdf",
       {
         documentId: document.id,
         documentVersionId: document.versions[0].id,
         teamId,
+        conversionType: "keynote",
       },
       {
-        idempotencyKey: `${teamId}-${document.versions[0].id}-keynote`,
+        jobId: `${teamId}-${document.versions[0].id}-keynote`,
         tags: [
           `team_${teamId}`,
           `document_${document.id}`,
           `version:${document.versions[0].id}`,
         ],
-        queue: conversionQueue(teamPlan),
-        concurrencyKey: teamId,
       },
     );
   } else if (type === "docs" || type === "slides") {
-    await convertFilesToPdfTask.trigger(
+    await addJobWithTags(
+      fileConversionQueue,
+      "files-to-pdf",
       {
         documentId: document.id,
         documentVersionId: document.versions[0].id,
         teamId,
+        conversionType: "office",
       },
       {
-        idempotencyKey: `${teamId}-${document.versions[0].id}-docs`,
+        jobId: `${teamId}-${document.versions[0].id}-docs`,
         tags: [
           `team_${teamId}`,
           `document_${document.id}`,
           `version:${document.versions[0].id}`,
         ],
-        queue: conversionQueue(teamPlan),
-        concurrencyKey: teamId,
       },
     );
   }
 
   if (type === "cad") {
-    await convertCadToPdfTask.trigger(
+    await addJobWithTags(
+      fileConversionQueue,
+      "cad-to-pdf",
       {
         documentId: document.id,
         documentVersionId: document.versions[0].id,
         teamId,
+        conversionType: "cad",
       },
       {
-        idempotencyKey: `${teamId}-${document.versions[0].id}-cad`,
+        jobId: `${teamId}-${document.versions[0].id}-cad`,
         tags: [
           `team_${teamId}`,
           `document_${document.id}`,
           `version:${document.versions[0].id}`,
         ],
-        queue: conversionQueue(teamPlan),
-        concurrencyKey: teamId,
       },
     );
   }
@@ -206,7 +207,9 @@ export const processDocument = async ({
     contentType !== "video/mp4" &&
     contentType?.startsWith("video/")
   ) {
-    await processVideo.trigger(
+    await addJobWithTags(
+      videoOptimizationQueue,
+      "optimize-video",
       {
         videoUrl: key,
         teamId,
@@ -215,35 +218,33 @@ export const processDocument = async ({
         fileSize: fileSize || 0,
       },
       {
-        idempotencyKey: `${teamId}-${document.versions[0].id}`,
+        jobId: `${teamId}-${document.versions[0].id}-video`,
         tags: [
           `team_${teamId}`,
           `document_${document.id}`,
           `version:${document.versions[0].id}`,
         ],
-        queue: conversionQueue(teamPlan),
-        concurrencyKey: teamId,
       },
     );
   }
 
   // skip triggering convert-pdf-to-image job for "notion" / "excel" documents
   if (type === "pdf") {
-    await convertPdfToImageRoute.trigger(
+    await addJobWithTags(
+      pdfToImageQueue,
+      "pdf-to-image",
       {
         documentId: document.id,
         documentVersionId: document.versions[0].id,
         teamId,
       },
       {
-        idempotencyKey: `${teamId}-${document.versions[0].id}`,
+        jobId: `${teamId}-${document.versions[0].id}-pdf`,
         tags: [
           `team_${teamId}`,
           `document_${document.id}`,
           `version:${document.versions[0].id}`,
         ],
-        queue: conversionQueue(teamPlan),
-        concurrencyKey: teamId,
       },
     );
   }

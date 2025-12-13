@@ -1,13 +1,16 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
-import { runs } from "@trigger.dev/sdk/v3";
 import { waitUntil } from "@vercel/functions";
 import { getServerSession } from "next-auth/next";
 
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
-import { sendDataroomChangeNotificationTask } from "@/lib/trigger/dataroom-change-notification";
+import {
+  addJobWithTags,
+  dataroomNotificationQueue,
+} from "@/lib/queues";
+import { cancelPendingDataroomNotifications } from "@/lib/queues/helpers";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
 import { sortItemsByIndexAndName } from "@/lib/utils/sort-items-by-index-name";
@@ -176,19 +179,13 @@ export default async function handle(
 
       // Check if the team has the dataroom change notification enabled
       if (document.dataroom.enableChangeNotifications) {
-        // Get all delayed and queued runs for this dataroom
-        const allRuns = await runs.list({
-          taskIdentifier: ["send-dataroom-change-notification"],
-          tag: [`dataroom_${dataroomId}`],
-          status: ["DELAYED", "QUEUED"],
-          period: "10m",
-        });
-
-        // Cancel any existing unsent notification runs for this dataroom
-        await Promise.all(allRuns.data.map((run) => runs.cancel(run.id)));
+        // Cancel any existing pending notifications for this dataroom
+        await cancelPendingDataroomNotifications(dataroomId);
 
         waitUntil(
-          sendDataroomChangeNotificationTask.trigger(
+          addJobWithTags(
+            dataroomNotificationQueue,
+            "dataroom-notification",
             {
               dataroomId,
               dataroomDocumentId: document.id,
@@ -196,13 +193,13 @@ export default async function handle(
               teamId,
             },
             {
-              idempotencyKey: `dataroom-notification-${teamId}-${dataroomId}-${document.id}`,
+              jobId: `dataroom-notification-${teamId}-${dataroomId}-${document.id}`,
               tags: [
                 `team_${teamId}`,
                 `dataroom_${dataroomId}`,
                 `document_${document.id}`,
               ],
-              delay: new Date(Date.now() + 10 * 60 * 1000), // 10 minute delay
+              delay: 10 * 60 * 1000, // 10 minute delay
             },
           ),
         );

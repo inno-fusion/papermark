@@ -7,11 +7,7 @@ import { getServerSession } from "next-auth/next";
 import { sendDataroomTrialWelcome } from "@/lib/emails/send-dataroom-trial";
 import { newId } from "@/lib/id-helper";
 import prisma from "@/lib/prisma";
-import {
-  sendDataroomTrial24hReminderEmailTask,
-  sendDataroomTrialExpiredEmailTask,
-  sendDataroomTrialInfoEmailTask,
-} from "@/lib/trigger/send-scheduled-email";
+import { addJobWithTags, emailQueue } from "@/lib/queues";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
 
@@ -113,21 +109,27 @@ export default async function handle(
        */
       waitUntil(sendDataroomTrialWelcome({ fullName, to: email! }));
       waitUntil(
-        sendDataroomTrialInfoEmailTask.trigger(
-          { to: email!, useCase },
-          { delay: "1d" },
+        addJobWithTags(
+          emailQueue,
+          "dataroom-trial-info",
+          { to: email!, useCase, emailType: "dataroom-trial-info" },
+          { delay: 24 * 60 * 60 * 1000 }, // 1 day
         ),
       );
       waitUntil(
-        sendDataroomTrial24hReminderEmailTask.trigger(
-          { to: email!, name: fullName.split(" ")[0], teamId },
-          { delay: "6d" },
+        addJobWithTags(
+          emailQueue,
+          "dataroom-trial-24h-reminder",
+          { to: email!, name: fullName.split(" ")[0], teamId, emailType: "dataroom-trial-24h-reminder" },
+          { delay: 6 * 24 * 60 * 60 * 1000 }, // 6 days
         ),
       );
       waitUntil(
-        sendDataroomTrialExpiredEmailTask.trigger(
-          { to: email!, name: fullName.split(" ")[0], teamId },
-          { delay: "7d" },
+        addJobWithTags(
+          emailQueue,
+          "dataroom-trial-expired",
+          { to: email!, name: fullName.split(" ")[0], teamId, emailType: "dataroom-trial-expired" },
+          { delay: 7 * 24 * 60 * 60 * 1000 }, // 7 days
         ),
       );
 

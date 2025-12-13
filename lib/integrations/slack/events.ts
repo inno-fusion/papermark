@@ -13,6 +13,11 @@ export class SlackEventManager {
   }
 
   async processEvent(eventData: SlackEventData): Promise<void> {
+    // Skip if Slack is not configured
+    if (!this.client.isConfigured) {
+      return;
+    }
+
     try {
       const env = getSlackEnv();
 

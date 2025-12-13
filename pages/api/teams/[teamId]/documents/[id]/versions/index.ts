@@ -5,12 +5,14 @@ import { getServerSession } from "next-auth/next";
 
 import { copyFileToBucketServer } from "@/lib/files/copy-file-to-bucket-server";
 import prisma from "@/lib/prisma";
-import { convertFilesToPdfTask } from "@/lib/trigger/convert-files";
-import { processVideo } from "@/lib/trigger/optimize-video-files";
-import { convertPdfToImageRoute } from "@/lib/trigger/pdf-to-image-route";
+import {
+  addJobWithTags,
+  fileConversionQueue,
+  pdfToImageQueue,
+  videoOptimizationQueue,
+} from "@/lib/queues";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
-import { conversionQueue } from "@/lib/utils/trigger-utils";
 import { documentUploadSchema } from "@/lib/zod/url-validation";
 
 export default async function handle(
@@ -132,21 +134,22 @@ export default async function handle(
       });
 
       if (type === "docs" || type === "slides") {
-        await convertFilesToPdfTask.trigger(
+        await addJobWithTags(
+          fileConversionQueue,
+          "files-to-pdf",
           {
             documentVersionId: version.id,
             teamId,
             documentId,
+            conversionType: "office",
           },
           {
-            idempotencyKey: `${teamId}-${version.id}-docs`,
+            jobId: `${teamId}-${version.id}-docs`,
             tags: [
               `team_${teamId}`,
               `document_${documentId}`,
               `version:${version.id}`,
             ],
-            queue: conversionQueue(team.plan),
-            concurrencyKey: teamId,
           },
         );
       }
@@ -156,7 +159,9 @@ export default async function handle(
         contentType !== "video/mp4" &&
         contentType?.startsWith("video/")
       ) {
-        await processVideo.trigger(
+        await addJobWithTags(
+          videoOptimizationQueue,
+          "optimize-video",
           {
             videoUrl: url,
             teamId,
@@ -165,37 +170,34 @@ export default async function handle(
             fileSize: fileSize || 0,
           },
           {
-            idempotencyKey: `${teamId}-${version.id}`,
+            jobId: `${teamId}-${version.id}-video`,
             tags: [
               `team_${teamId}`,
               `document_${documentId}`,
               `version:${version.id}`,
             ],
-            queue: conversionQueue(team.plan),
-            concurrencyKey: teamId,
           },
         );
       }
 
       // trigger document uploaded event to trigger convert-pdf-to-image job
       if (type === "pdf") {
-        await convertPdfToImageRoute.trigger(
+        await addJobWithTags(
+          pdfToImageQueue,
+          "pdf-to-image",
           {
             documentId: documentId,
             documentVersionId: version.id,
             teamId,
-            // docId: version.file.split("/")[1], // Extract doc_xxxx from teamId/doc_xxxx/filename
             versionNumber: version.versionNumber,
           },
           {
-            idempotencyKey: `${teamId}-${version.id}`,
+            jobId: `${teamId}-${version.id}-pdf`,
             tags: [
               `team_${teamId}`,
               `document_${documentId}`,
               `version:${version.id}`,
             ],
-            queue: conversionQueue(team.plan),
-            concurrencyKey: teamId,
           },
         );
       }
