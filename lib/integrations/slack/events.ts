@@ -21,6 +21,11 @@ export class SlackEventManager {
     try {
       const env = getSlackEnv();
 
+      // Skip if Slack env is not configured
+      if (!env) {
+        return;
+      }
+
       const integration = await prisma.installedIntegration.findUnique({
         where: {
           teamId_integrationId: {

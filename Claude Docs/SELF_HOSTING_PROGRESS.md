@@ -15,7 +15,7 @@
 | Redis | ✅ Complete | Redis in docker-compose |
 | Document Conversion | ✅ Complete | Gotenberg for Office docs |
 | Authentication | ✅ Complete | Hanko/Passkey removed |
-| Integrations | ✅ Graceful | Slack fails gracefully if not configured |
+| Integrations | ✅ Complete | Slack fully configurable for self-hosting |
 | Webhook Delivery | ✅ Complete | BullMQ replaced QStash |
 | Email | 🔄 Pending | Still uses Resend |
 | Rate Limiting | 🔄 Pending | Still uses @upstash/ratelimit |
@@ -246,6 +246,42 @@ TRIGGER_API_URL=
 
 ---
 
+### 9. Slack Integration Self-Hosting ✅
+
+**What:** Made Slack integration fully configurable for self-hosted deployments.
+
+**Setup Required:**
+1. Create Slack app at [api.slack.com/apps](https://api.slack.com/apps)
+2. Configure OAuth redirect: `{BASE_URL}/api/integrations/slack/oauth/callback`
+3. Add bot scopes: `channels:read`, `chat:write`, `chat:write.public`, `groups:read`, `team:read`, `users:read`
+4. Run: `npx tsx prisma/seed-slack.ts` to create Integration record
+
+**Environment Variables:**
+```bash
+SLACK_CLIENT_ID=<from Slack app>
+SLACK_CLIENT_SECRET=<from Slack app>
+SLACK_APP_INSTALL_URL=https://slack.com/oauth/v2/authorize?client_id=...
+SLACK_INTEGRATION_ID=<from seed script>
+NEXT_PRIVATE_SLACK_ENCRYPTION_KEY=<openssl rand -hex 32>
+```
+
+**Files Modified:**
+- `lib/integrations/slack/env.ts` - Returns null instead of throwing when not configured
+- `lib/integrations/slack/events.ts` - Handles null env gracefully
+- `lib/integrations/slack/install.ts` - Throws clear error if not configured
+- `app/api/integrations/slack/oauth/callback/route.ts` - Returns 503 if not configured
+- `.env.example` - Added Slack config section
+
+**Files Created:**
+- `prisma/seed-slack.ts` - Seed script for Integration record
+
+**Behavior:**
+- If Slack vars not set: Integration silently disabled (no errors)
+- If partially configured: Warning logged, integration disabled
+- If fully configured: Full Slack notifications available
+
+---
+
 ## Remaining Items
 
 ### Priority 1: Remove @upstash/redis
@@ -279,6 +315,8 @@ TRIGGER_API_URL=
 
 ## Running Self-Hosted Papermark
 
+> **See the full guide**: [SELF_HOSTING.md](../SELF_HOSTING.md)
+
 ### Quick Start
 
 ```bash
@@ -288,7 +326,10 @@ docker-compose up -d
 # 2. Run migrations
 npx prisma migrate deploy
 
-# 3. Start app + workers (two terminals, or use dev:all)
+# 3. Seed integrations (optional)
+npx tsx prisma/seed-slack.ts
+
+# 4. Start app + workers (two terminals, or use dev:all)
 npm run dev
 npm run workers:dev
 
@@ -367,3 +408,5 @@ NEXT_PRIVATE_CONVERSION_BASE_URL=http://localhost:3001
 | 2025-12-13 | Docker compose updated with all services |
 | 2025-12-13 | QStash replaced with BullMQ for webhook delivery |
 | 2025-12-13 | Trigger.dev fully removed (98 packages) |
+| 2025-12-13 | Slack integration fully self-hostable |
+| 2025-12-13 | Comprehensive SELF_HOSTING.md guide created |
