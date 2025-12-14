@@ -17,8 +17,12 @@ export function isTinybirdConfigured(): boolean {
 }
 
 // Only create Tinybird client if token is configured
+// Base URL depends on region: api.tinybird.co (EU), api.us-east.tinybird.co (US East), api.us-west-2.tinybird.co (US West)
 const tb = process.env.TINYBIRD_TOKEN
-  ? new Tinybird({ token: process.env.TINYBIRD_TOKEN })
+  ? new Tinybird({
+      token: process.env.TINYBIRD_TOKEN,
+      baseUrl: process.env.TINYBIRD_BASE_URL || "https://api.tinybird.co",
+    })
   : null;
 
 // ===========================================

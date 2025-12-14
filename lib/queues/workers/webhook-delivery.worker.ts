@@ -49,8 +49,9 @@ async function recordWebhookEventIfConfigured(data: {
 
   try {
     // Call Tinybird ingest API directly
+    const tinybirdBaseUrl = process.env.TINYBIRD_BASE_URL || "https://api.tinybird.co";
     const response = await fetch(
-      "https://api.tinybird.co/v0/events?name=webhook_events__v1",
+      `${tinybirdBaseUrl}/v0/events?name=webhook_events__v1`,
       {
         method: "POST",
         headers: {

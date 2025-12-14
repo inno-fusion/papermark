@@ -144,10 +144,16 @@ export async function getYearInReviewStats(teamId: string) {
   };
 }
 
-const tb = new Tinybird({ token: process.env.TINYBIRD_TOKEN! });
+// Only create Tinybird client if token is configured
+const tb = process.env.TINYBIRD_TOKEN
+  ? new Tinybird({
+      token: process.env.TINYBIRD_TOKEN,
+      baseUrl: process.env.TINYBIRD_BASE_URL || "https://api.tinybird.co",
+    })
+  : null;
 
 // tinybird pipe to get the total view duration for all documents in a team
-export const getTotalDuration = tb.buildPipe({
+const _getTotalDuration = tb?.buildPipe({
   pipe: "get_total_team_duration__v1",
   parameters: z.object({
     documentIds: z.string().describe("Comma separated documentIds"),
@@ -157,3 +163,16 @@ export const getTotalDuration = tb.buildPipe({
     unique_countries: z.array(z.string()),
   }),
 });
+
+// Safe wrapper that returns empty data if Tinybird is not configured
+export const getTotalDuration = async (params: { documentIds: string }) => {
+  if (!_getTotalDuration) {
+    return { data: [{ total_duration: 0, unique_countries: [] }] };
+  }
+  try {
+    return await _getTotalDuration(params);
+  } catch (error) {
+    console.warn("[Tinybird] Failed to query get_total_team_duration:", error);
+    return { data: [{ total_duration: 0, unique_countries: [] }] };
+  }
+};

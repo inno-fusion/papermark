@@ -9,8 +9,12 @@ import { WEBHOOK_TRIGGERS } from "../webhook/constants";
 // ===========================================
 
 // Only create Tinybird client if token is configured
+// Base URL depends on region: api.tinybird.co (EU), api.us-east.tinybird.co (US East), api.us-west-2.tinybird.co (US West)
 const tb = process.env.TINYBIRD_TOKEN
-  ? new Tinybird({ token: process.env.TINYBIRD_TOKEN })
+  ? new Tinybird({
+      token: process.env.TINYBIRD_TOKEN,
+      baseUrl: process.env.TINYBIRD_BASE_URL || "https://api.tinybird.co",
+    })
   : null;
 
 // ===========================================
@@ -33,7 +37,7 @@ const _getTotalAvgPageDuration = tb?.buildPipe({
 });
 
 const _getViewPageDuration = tb?.buildPipe({
-  pipe: "get_page_duration_per_view__v5",
+  pipe: "get_page_duration_per_view__v4",
   parameters: z.object({
     documentId: z.string(),
     viewId: z.string(),
