@@ -21,6 +21,12 @@ import { getIpAddress } from "@/lib/utils/ip";
 
 const VERCEL_DEPLOYMENT = !!process.env.VERCEL_URL;
 
+// Detect if we're running in a secure context (Vercel OR HTTPS self-hosted)
+const NEXTAUTH_URL = process.env.NEXTAUTH_URL || "";
+const IS_HTTPS = NEXTAUTH_URL.startsWith("https://");
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const USE_SECURE_COOKIES = VERCEL_DEPLOYMENT || (IS_PRODUCTION && IS_HTTPS);
+
 function getMainDomainUrl(): string {
   if (process.env.NODE_ENV === "development") {
     return process.env.NEXTAUTH_URL || "http://localhost:3000";
@@ -106,14 +112,14 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   cookies: {
     sessionToken: {
-      name: `${VERCEL_DEPLOYMENT ? "__Secure-" : ""}next-auth.session-token`,
+      name: `${USE_SECURE_COOKIES ? "__Secure-" : ""}next-auth.session-token`,
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        // When working on localhost, the cookie domain must be omitted entirely (https://stackoverflow.com/a/1188145)
+        // For Vercel, use .papermark.com; for self-hosted, don't set domain (use request domain)
         domain: VERCEL_DEPLOYMENT ? ".papermark.com" : undefined,
-        secure: VERCEL_DEPLOYMENT,
+        secure: USE_SECURE_COOKIES,
       },
     },
   },

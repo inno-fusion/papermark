@@ -519,6 +519,47 @@ export const uploadImage = async (
   file: File,
   uploadType: "profile" | "assets" = "assets",
 ) => {
+  // Check if using S3 transport (self-hosted mode)
+  const uploadTransport = process.env.NEXT_PUBLIC_UPLOAD_TRANSPORT;
+
+  if (uploadTransport === "s3") {
+    // S3 upload flow: get presigned URL and upload directly
+    const response = await fetch("/api/file/s3/asset-presigned-url", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        contentType: file.type,
+        uploadType,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to get upload URL");
+    }
+
+    const { uploadUrl, publicUrl } = await response.json();
+
+    // Upload file directly to S3 using presigned URL
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      body: file,
+      headers: {
+        "Content-Type": file.type,
+      },
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error("Failed to upload file to S3");
+    }
+
+    return publicUrl;
+  }
+
+  // Default: Vercel Blob upload flow
   const newBlob = await upload(file.name, file, {
     access: "public",
     handleUploadUrl: `/api/file/image-upload?type=${uploadType}`,
