@@ -22,6 +22,8 @@ export const getS3Client = (storageRegion?: string) => {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
     },
+    // Required for MinIO and other S3-compatible services
+    forcePathStyle: !!config.endpoint,
   });
 };
 
@@ -41,6 +43,8 @@ export const getS3ClientForTeam = async (teamId: string) => {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
     },
+    // Required for MinIO and other S3-compatible services
+    forcePathStyle: !!config.endpoint,
   });
 };
 
@@ -103,6 +107,8 @@ export const getTeamS3ClientAndConfig = async (teamId: string) => {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
     },
+    // Required for MinIO and other S3-compatible services
+    forcePathStyle: !!config.endpoint,
   });
 
   return { client, config };

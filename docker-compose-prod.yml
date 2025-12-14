@@ -126,7 +126,11 @@ services:
       # Webhooks (optional)
       NEXT_PUBLIC_WEBHOOK_BASE_URL: ${NEXT_PUBLIC_WEBHOOK_BASE_URL:-}
       NEXT_PUBLIC_WEBHOOK_BASE_HOST: ${NEXT_PUBLIC_WEBHOOK_BASE_HOST:-}
-      # Storage (S3)
+      # Storage (S3/MinIO)
+      # IMPORTANT: For MinIO, NEXT_PRIVATE_UPLOAD_ENDPOINT must be a publicly
+      # accessible HTTPS URL (e.g., https://minio.yourdomain.com) because
+      # presigned URLs are returned to browsers. Do NOT use internal Docker
+      # hostnames like http://minio:9000 - browsers cannot access these.
       NEXT_PRIVATE_UPLOAD_BUCKET: ${NEXT_PRIVATE_UPLOAD_BUCKET}
       NEXT_PRIVATE_UPLOAD_REGION: ${NEXT_PRIVATE_UPLOAD_REGION:-us-east-1}
       NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID: ${NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID}
@@ -197,7 +201,7 @@ services:
       NEXT_PRIVATE_CONVERSION_BASE_URL: http://gotenberg:3000
       GOTENBERG_USERNAME: ${GOTENBERG_USERNAME:-gotenberg}
       GOTENBERG_PASSWORD: ${GOTENBERG_PASSWORD}
-      # Storage (S3)
+      # Storage (S3/MinIO) - same config as docroom service
       NEXT_PRIVATE_UPLOAD_BUCKET: ${NEXT_PRIVATE_UPLOAD_BUCKET}
       NEXT_PRIVATE_UPLOAD_REGION: ${NEXT_PRIVATE_UPLOAD_REGION:-us-east-1}
       NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID: ${NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID}
@@ -231,32 +235,6 @@ services:
     networks:
       - docroom-network
 
-  # ===========================================================================
-  # MinIO for local S3-compatible storage (optional, for development)
-  # Uncomment to use instead of external S3
-  # ===========================================================================
-  # minio:
-  #   image: minio/minio:latest
-  #   container_name: docroom-minio
-  #   <<: *default-logging
-  #   ports:
-  #     - "9000:9000"   # S3 API
-  #     - "9001:9001"   # Console
-  #   environment:
-  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-  #   volumes:
-  #     - ./data/minio:/data
-  #   command: server /data --console-address ":9001"
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-  #     interval: 30s
-  #     timeout: 20s
-  #     retries: 3
-  #   networks:
-  #     - docroom-network
-
 # =============================================================================
 # Networks
 # =============================================================================
@@ -279,7 +257,10 @@ networks:
 # Folder structure:
 #   ./data/postgres/  - PostgreSQL database files
 #   ./data/redis/     - Redis persistence (AOF)
-#   ./data/minio/     - MinIO object storage (if enabled)
+#
+# External Services:
+#   MinIO is hosted separately via docker-compose-minio.yml
+#   Set NEXT_PRIVATE_UPLOAD_ENDPOINT to your public MinIO URL (e.g., https://minio.yourdomain.com)
 #
 # Logging:
 #   Logs are limited to prevent unbounded growth (default: 10MB x 3 files)
