@@ -8,7 +8,6 @@ import path from "node:path";
 
 import { ONE_HOUR, ONE_SECOND } from "@/lib/constants";
 import { getTeamS3ClientAndConfig } from "@/lib/files/aws-client";
-import { newId } from "@/lib/id-helper";
 import prisma from "@/lib/prisma";
 import { CustomUser } from "@/lib/types";
 
@@ -84,7 +83,7 @@ export default async function handler(
     );
 
     // Generate unique asset ID
-    const assetId = newId("asset");
+    const assetId = crypto.randomUUID();
 
     // Get the basename and extension for the file
     const { name, ext } = path.parse(fileName);
