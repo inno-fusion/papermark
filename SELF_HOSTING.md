@@ -225,12 +225,6 @@ GOOGLE_CLIENT_SECRET=
 # RESEND_API_KEY=
 
 # ===================
-# ANALYTICS (Tinybird)
-# ===================
-
-# TINYBIRD_TOKEN=
-
-# ===================
 # SLACK INTEGRATION
 # ===================
 

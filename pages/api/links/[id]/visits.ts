@@ -7,7 +7,7 @@ import { LIMITS } from "@/lib/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
 import { getDocumentWithTeamAndUser } from "@/lib/team/helper";
-import { getViewPageDuration } from "@/lib/tinybird";
+import { getViewPageDuration } from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
 

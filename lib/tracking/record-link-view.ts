@@ -2,7 +2,7 @@ import { NextRequest, userAgent } from "next/server";
 
 import { geolocation, ipAddress } from "@vercel/functions";
 
-import { recordLinkViewTB } from "@/lib/tinybird";
+import { recordLinkViewTB } from "@/lib/analytics";
 import { isBot } from "@/lib/utils/user-agent";
 
 import sendNotification from "../api/notification-helper";

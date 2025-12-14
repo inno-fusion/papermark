@@ -29,6 +29,11 @@ model Document {
   tags      TagItem[]
   annotations DocumentAnnotation[] // Annotations for this document
 
+  // Analytics (replaces Tinybird)
+  pageViews   PageView[]
+  videoViews  VideoView[]
+  clickEvents ClickEvent[]
+
   // upload external documents
   uploadedDocument DocumentUpload[]
   isExternalUpload Boolean          @default(false) // Indicates if the document is an external upload

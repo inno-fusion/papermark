@@ -1,0 +1,172 @@
+// ============================================
+// ANALYTICS TABLES (Replaces Tinybird)
+// ============================================
+
+model PageView {
+  id              String   @id @default(cuid())
+  linkId          String
+  documentId      String
+  viewId          String
+  dataroomId      String?
+  versionNumber   Int      @default(1) @db.SmallInt
+  time            BigInt
+  duration        Int
+  pageNumber      String
+  country         String   @default("Unknown")
+  city            String   @default("Unknown")
+  region          String   @default("Unknown")
+  latitude        String   @default("Unknown")
+  longitude       String   @default("Unknown")
+  ua              String   @default("Unknown")
+  browser         String   @default("Unknown")
+  browserVersion  String   @default("Unknown") @map("browser_version")
+  engine          String   @default("Unknown")
+  engineVersion   String   @default("Unknown") @map("engine_version")
+  os              String   @default("Unknown")
+  osVersion       String   @default("Unknown") @map("os_version")
+  device          String   @default("Desktop")
+  deviceVendor    String   @default("Unknown") @map("device_vendor")
+  deviceModel     String   @default("Unknown") @map("device_model")
+  cpuArchitecture String   @default("Unknown") @map("cpu_architecture")
+  bot             Boolean  @default(false)
+  referer         String   @default("(direct)")
+  refererUrl      String   @default("(direct)") @map("referer_url")
+
+  // Relations
+  link     Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  view     View     @relation(fields: [viewId], references: [id], onDelete: Cascade)
+
+  @@index([linkId, documentId, viewId, time])
+  @@index([documentId, time])
+  @@index([viewId])
+  @@index([dataroomId, time])
+  @@map("page_views")
+}
+
+model WebhookEvent {
+  id           String   @id @default(cuid())
+  timestamp    DateTime @default(now())
+  eventId      String   @map("event_id")
+  webhookId    String   @map("webhook_id")
+  url          String
+  event        String
+  httpStatus   Int      @map("http_status") @db.SmallInt
+  requestBody  String   @map("request_body") @db.Text
+  responseBody String   @map("response_body") @db.Text
+  messageId    String   @map("message_id")
+
+  // Relations
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, timestamp(sort: Desc)])
+  @@map("webhook_events")
+}
+
+model VideoView {
+  id            String   @id @default(cuid())
+  timestamp     DateTime
+  linkId        String   @map("link_id")
+  documentId    String   @map("document_id")
+  viewId        String   @map("view_id")
+  dataroomId    String?  @map("dataroom_id")
+  versionNumber Int      @default(1) @map("version_number") @db.SmallInt
+  eventType     String   @map("event_type")
+  startTime     Int      @map("start_time")
+  endTime       Int      @default(0) @map("end_time")
+  playbackRate  Int      @map("playback_rate") @db.SmallInt
+  volume        Int      @db.SmallInt
+  isMuted       Boolean  @default(false) @map("is_muted")
+  isFocused     Boolean  @default(false) @map("is_focused")
+  isFullscreen  Boolean  @default(false) @map("is_fullscreen")
+  country       String   @default("Unknown")
+  city          String   @default("Unknown")
+  region        String   @default("Unknown")
+  latitude      String   @default("Unknown")
+  longitude     String   @default("Unknown")
+  ua            String   @default("Unknown")
+  browser       String   @default("Unknown")
+  browserVersion String  @default("Unknown") @map("browser_version")
+  engine        String   @default("Unknown")
+  engineVersion String   @default("Unknown") @map("engine_version")
+  os            String   @default("Unknown")
+  osVersion     String   @default("Unknown") @map("os_version")
+  device        String   @default("Desktop")
+  deviceVendor  String   @default("Unknown") @map("device_vendor")
+  deviceModel   String   @default("Unknown") @map("device_model")
+  cpuArchitecture String @default("Unknown") @map("cpu_architecture")
+  bot           Boolean  @default(false)
+  referer       String   @default("(direct)")
+  refererUrl    String   @default("(direct)") @map("referer_url")
+  ipAddress     String?  @map("ip_address")
+
+  // Relations
+  link     Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  view     View     @relation(fields: [viewId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, timestamp])
+  @@index([documentId, viewId, timestamp])
+  @@map("video_views")
+}
+
+model ClickEvent {
+  id            String   @id @default(cuid())
+  timestamp     DateTime
+  eventId       String   @map("event_id")
+  sessionId     String   @map("session_id")
+  linkId        String   @map("link_id")
+  documentId    String   @map("document_id")
+  dataroomId    String?  @map("dataroom_id")
+  viewId        String   @map("view_id")
+  pageNumber    String   @map("page_number")
+  versionNumber Int      @map("version_number") @db.SmallInt
+  href          String
+
+  // Relations
+  link     Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  view     View     @relation(fields: [viewId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, viewId, timestamp])
+  @@map("click_events")
+}
+
+model LinkClickEvent {
+  id              String   @id @default(cuid())
+  timestamp       DateTime
+  clickId         String   @map("click_id")
+  viewId          String   @map("view_id")
+  linkId          String   @map("link_id")
+  documentId      String?  @map("document_id")
+  dataroomId      String?  @map("dataroom_id")
+  continent       String   @default("Unknown")
+  country         String   @default("Unknown")
+  city            String   @default("Unknown")
+  region          String   @default("Unknown")
+  latitude        String   @default("Unknown")
+  longitude       String   @default("Unknown")
+  device          String   @default("Desktop")
+  deviceModel     String   @default("Unknown") @map("device_model")
+  deviceVendor    String   @default("Unknown") @map("device_vendor")
+  browser         String   @default("Unknown")
+  browserVersion  String   @default("Unknown") @map("browser_version")
+  os              String   @default("Unknown")
+  osVersion       String   @default("Unknown") @map("os_version")
+  engine          String   @default("Unknown")
+  engineVersion   String   @default("Unknown") @map("engine_version")
+  cpuArchitecture String   @default("Unknown") @map("cpu_architecture")
+  ua              String   @default("Unknown")
+  bot             Boolean  @default(false)
+  referer         String   @default("(direct)")
+  refererUrl      String   @default("(direct)") @map("referer_url")
+  ipAddress       String?  @map("ip_address")
+
+  // Relations
+  link Link  @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  view View  @relation(fields: [viewId], references: [id], onDelete: Cascade)
+
+  @@index([viewId])
+  @@index([timestamp, viewId, linkId])
+  @@map("link_click_events")
+}

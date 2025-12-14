@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth/next";
 
 import { isSelfHosted } from "@/ee/limits/constants";
 import prisma from "@/lib/prisma";
-import { getClickEventsByView } from "@/lib/tinybird/pipes";
+import { getClickEventsByView } from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
 

@@ -1,8 +1,7 @@
-import { Tinybird } from "@chronark/zod-bird";
 import { Prisma } from "@prisma/client";
-import { z } from "zod";
 
 import prisma from "@/lib/prisma";
+import { getTotalDuration } from "@/lib/analytics";
 
 import { COUNTRIES } from "../constants";
 
@@ -55,20 +54,20 @@ export async function getYearInReviewStats(teamId: string) {
         Array<{ documentId: string; documentName: string; viewCount: number }>
       >(Prisma.sql`
       WITH RankedDocuments AS (
-        SELECT 
+        SELECT
           d."id" as "documentId",
           d."name" as "documentName",
           COUNT(v."id") as "viewCount",
           ROW_NUMBER() OVER (ORDER BY COUNT(v."id") DESC) as rn
         FROM "Document" d
         LEFT JOIN "View" v ON v."documentId" = d."id"
-        WHERE 
+        WHERE
           d."teamId" = ${teamId}
-          AND v."viewedAt" >= '2024-01-01' 
+          AND v."viewedAt" >= '2024-01-01'
           AND v."viewedAt" < '2024-12-01'
         GROUP BY d."id", d."name"
       )
-      SELECT 
+      SELECT
         "documentId",
         "documentName",
         "viewCount"
@@ -80,12 +79,12 @@ export async function getYearInReviewStats(teamId: string) {
       // 3. Most active month
       prisma.$queryRaw<Array<{ month: Date; viewCount: number }>>(Prisma.sql`
       WITH MonthlyViews AS (
-        SELECT 
+        SELECT
           DATE_TRUNC('month', "viewedAt") as month,
           COUNT(*) as "viewCount",
           ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) as rn
         FROM "View"
-        WHERE 
+        WHERE
           "teamId" = ${teamId}
           AND "viewedAt" >= '2024-01-01'
           AND "viewedAt" < '2024-12-01'
@@ -108,12 +107,12 @@ export async function getYearInReviewStats(teamId: string) {
   }
 
   // get total duration for all documents in the team
-  const tinybirdData = await getTotalDuration({
+  const analyticsData = await getTotalDuration({
     documentIds: documents.map((doc) => doc.id).join(","),
   });
 
   // write full name of countries
-  const uniqueCountries = tinybirdData.data[0].unique_countries.map(
+  const uniqueCountries = (analyticsData.data[0]?.unique_countries || []).map(
     (country) => {
       // Map country codes to full names using COUNTRIES constant
       return COUNTRIES[country] || country;
@@ -139,40 +138,7 @@ export async function getYearInReviewStats(teamId: string) {
           viewCount: mostActiveMonth[0].viewCount,
         }
       : null,
-    totalDuration: tinybirdData.data[0].total_duration,
+    totalDuration: analyticsData.data[0]?.total_duration || 0,
     uniqueCountries: uniqueCountries,
   };
 }
-
-// Only create Tinybird client if token is configured
-const tb = process.env.TINYBIRD_TOKEN
-  ? new Tinybird({
-      token: process.env.TINYBIRD_TOKEN,
-      baseUrl: process.env.TINYBIRD_BASE_URL || "https://api.tinybird.co",
-    })
-  : null;
-
-// tinybird pipe to get the total view duration for all documents in a team
-const _getTotalDuration = tb?.buildPipe({
-  pipe: "get_total_team_duration__v1",
-  parameters: z.object({
-    documentIds: z.string().describe("Comma separated documentIds"),
-  }),
-  data: z.object({
-    total_duration: z.number(),
-    unique_countries: z.array(z.string()),
-  }),
-});
-
-// Safe wrapper that returns empty data if Tinybird is not configured
-export const getTotalDuration = async (params: { documentIds: string }) => {
-  if (!_getTotalDuration) {
-    return { data: [{ total_duration: 0, unique_countries: [] }] };
-  }
-  try {
-    return await _getTotalDuration(params);
-  } catch (error) {
-    console.warn("[Tinybird] Failed to query get_total_team_duration:", error);
-    return { data: [{ total_duration: 0, unique_countries: [] }] };
-  }
-};

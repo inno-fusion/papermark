@@ -6,7 +6,7 @@ import { getServerSession } from "next-auth/next";
 import { isSelfHosted } from "@/ee/limits/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
-import { getViewUserAgent, getViewUserAgent_v2 } from "@/lib/tinybird";
+import { getViewUserAgent, getViewUserAgent_v2 } from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 
 export default async function handle(

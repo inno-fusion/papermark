@@ -10,8 +10,8 @@ import {
   getTotalAvgPageDuration,
   getTotalDocumentDuration,
   getViewPageDuration,
-} from "@/lib/tinybird";
-import { getVideoEventsByDocument } from "@/lib/tinybird/pipes";
+  getVideoEventsByDocument,
+} from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 
 export default async function handle(

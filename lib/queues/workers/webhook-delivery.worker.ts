@@ -1,5 +1,7 @@
 import { Job, Worker } from "bullmq";
 
+import { recordWebhookEvent } from "@/lib/analytics";
+
 import { createRedisConnection } from "../connection";
 import type { WebhookDeliveryPayload } from "../types";
 
@@ -30,8 +32,8 @@ async function createWebhookSignature(
   return signatureArray.map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-// Record webhook event to Tinybird (optional - only if TINYBIRD_TOKEN is set)
-async function recordWebhookEventIfConfigured(data: {
+// Record webhook event to PostgreSQL via analytics library
+async function recordWebhookEventToAnalytics(data: {
   eventId: string;
   webhookId: string;
   messageId: string;
@@ -41,41 +43,17 @@ async function recordWebhookEventIfConfigured(data: {
   requestBody: string;
   responseBody: string;
 }): Promise<void> {
-  // Skip if Tinybird is not configured
-  const tinybirdToken = process.env.TINYBIRD_TOKEN;
-  if (!tinybirdToken) {
-    return;
-  }
-
   try {
-    // Call Tinybird ingest API directly
-    const tinybirdBaseUrl = process.env.TINYBIRD_BASE_URL || "https://api.tinybird.co";
-    const response = await fetch(
-      `${tinybirdBaseUrl}/v0/events?name=webhook_events__v1`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${tinybirdToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          event_id: data.eventId,
-          webhook_id: data.webhookId,
-          message_id: data.messageId,
-          event: data.event,
-          url: data.url,
-          http_status: data.httpStatus,
-          request_body: data.requestBody,
-          response_body: data.responseBody,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      console.warn(
-        `[Webhook Worker] Failed to record event to Tinybird: ${response.status}`,
-      );
-    }
+    await recordWebhookEvent({
+      event_id: data.eventId,
+      webhook_id: data.webhookId,
+      message_id: data.messageId,
+      event: data.event,
+      url: data.url,
+      http_status: data.httpStatus,
+      request_body: data.requestBody,
+      response_body: data.responseBody,
+    });
   } catch (error) {
     console.warn(`[Webhook Worker] Failed to record event:`, error);
   }
@@ -118,8 +96,8 @@ async function processWebhookDelivery(
     statusCode = response.status;
     responseBody = await response.text().catch(() => "");
 
-    // Record event (optional)
-    await recordWebhookEventIfConfigured({
+    // Record event to analytics
+    await recordWebhookEventToAnalytics({
       eventId,
       webhookId,
       messageId: job.id || eventId,
@@ -146,8 +124,8 @@ async function processWebhookDelivery(
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
 
-    // Record failure event (optional)
-    await recordWebhookEventIfConfigured({
+    // Record failure event
+    await recordWebhookEventToAnalytics({
       eventId,
       webhookId,
       messageId: job.id || eventId,

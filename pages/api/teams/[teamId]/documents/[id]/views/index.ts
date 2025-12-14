@@ -9,8 +9,7 @@ import { isSelfHosted } from "@/ee/limits/constants";
 import { LIMITS } from "@/lib/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
-import { getViewPageDuration } from "@/lib/tinybird";
-import { getVideoEventsByDocument } from "@/lib/tinybird/pipes";
+import { getViewPageDuration, getVideoEventsByDocument } from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
 

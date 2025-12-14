@@ -11,7 +11,7 @@ import {
   getTotalLinkDuration,
   getTotalViewerDuration,
   getViewPageDuration,
-} from "@/lib/tinybird/pipes";
+} from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 import { durationFormat } from "@/lib/utils";
 

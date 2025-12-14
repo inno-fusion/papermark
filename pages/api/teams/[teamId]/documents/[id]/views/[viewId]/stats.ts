@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth/next";
 
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
-import { getViewPageDuration } from "@/lib/tinybird";
+import { getViewPageDuration } from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 
 export default async function handle(

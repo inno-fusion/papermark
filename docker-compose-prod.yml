@@ -154,9 +154,6 @@ services:
       SLACK_APP_INSTALL_URL: ${SLACK_APP_INSTALL_URL:-}
       SLACK_INTEGRATION_ID: ${SLACK_INTEGRATION_ID:-clslackintegration0x}
       NEXT_PRIVATE_SLACK_ENCRYPTION_KEY: ${NEXT_PRIVATE_SLACK_ENCRYPTION_KEY:-}
-      # Tinybird analytics (optional)
-      TINYBIRD_TOKEN: ${TINYBIRD_TOKEN:-}
-      TINYBIRD_BASE_URL: ${TINYBIRD_BASE_URL:-https://api.us-east.aws.tinybird.co}
     ports:
       - "3000:3000"
     depends_on:
@@ -225,9 +222,6 @@ services:
       SLACK_APP_INSTALL_URL: ${SLACK_APP_INSTALL_URL:-}
       SLACK_INTEGRATION_ID: ${SLACK_INTEGRATION_ID:-clslackintegration0x}
       NEXT_PRIVATE_SLACK_ENCRYPTION_KEY: ${NEXT_PRIVATE_SLACK_ENCRYPTION_KEY:-}
-      # Tinybird analytics (optional)
-      TINYBIRD_TOKEN: ${TINYBIRD_TOKEN:-}
-      TINYBIRD_BASE_URL: ${TINYBIRD_BASE_URL:-https://api.us-east.aws.tinybird.co}
     depends_on:
       docroom:
         condition: service_healthy

@@ -7,7 +7,7 @@ import { isSelfHosted } from "@/ee/limits/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
 import { redis } from "@/lib/redis";
-import { getDocumentDurationPerViewer } from "@/lib/tinybird";
+import { getDocumentDurationPerViewer } from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 import { Prisma } from "@prisma/client";
 
