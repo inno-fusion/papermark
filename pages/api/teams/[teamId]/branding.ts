@@ -1,14 +1,44 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { del } from "@vercel/blob";
 import { getServerSession } from "next-auth";
 
 import { errorhandler } from "@/lib/errorHandler";
+import { getTeamS3ClientAndConfig } from "@/lib/files/aws-client";
 import prisma from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { CustomUser } from "@/lib/types";
 
 import { authOptions } from "../../auth/[...nextauth]";
+
+// Helper to delete asset (handles both Vercel Blob and S3)
+async function deleteAsset(url: string | null, teamId: string) {
+  if (!url) return;
+
+  try {
+    // Check if it's an S3 asset URL (our proxy endpoint)
+    if (url.includes("/api/file/s3/serve-asset?key=")) {
+      const keyMatch = url.match(/[?&]key=([^&]+)/);
+      if (keyMatch) {
+        const key = decodeURIComponent(keyMatch[1]);
+        const { client, config } = await getTeamS3ClientAndConfig(teamId);
+        await client.send(
+          new DeleteObjectCommand({
+            Bucket: config.bucket,
+            Key: key,
+          }),
+        );
+      }
+    } else if (url.startsWith("https://") && !url.includes("/api/")) {
+      // Assume it's a Vercel Blob URL
+      await del(url);
+    }
+  } catch (error) {
+    // Log but don't throw - we still want to delete the database record
+    console.error("[Delete Asset Error]", error);
+  }
+}
 
 export default async function handle(
   req: NextApiRequest,
@@ -136,14 +166,9 @@ export default async function handle(
     });
 
     if (brand) {
-      // delete the logo from vercel blob
-      if (brand.logo) {
-        await del(brand.logo);
-      }
-      // delete the banner from vercel blob
-      if (brand.banner) {
-        await del(brand.banner);
-      }
+      // delete the logo and banner from storage (S3 or Vercel Blob)
+      await deleteAsset(brand.logo, teamId);
+      await deleteAsset(brand.banner, teamId);
     }
 
     // delete the branding from database

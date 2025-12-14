@@ -66,3 +66,4 @@ changelog
 
 # Docker data volumes (bind mounts)
 data/
+.env.docker.prod

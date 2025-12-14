@@ -103,10 +103,9 @@ export default async function handler(
     });
 
     // Construct the public URL for the uploaded file
-    const distributionHost = process.env.NEXT_PRIVATE_UPLOAD_DISTRIBUTION_HOST;
-    const publicUrl = distributionHost
-      ? `https://${distributionHost}/${key}`
-      : `https://${s3Config.bucket}.s3.${s3Config.region}.amazonaws.com/${key}`;
+    // Use proxy endpoint for S3 assets (handles presigned URLs automatically)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "";
+    const publicUrl = `${baseUrl}/api/file/s3/serve-asset?key=${encodeURIComponent(key)}`;
 
     return res.status(200).json({
       uploadUrl,

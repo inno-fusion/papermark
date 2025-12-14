@@ -1,61 +1,34 @@
+
 version: '3.8'
 
-# =============================================================================
-# DocRoom Docker Compose
-# Complete self-hosted stack with app, worker, and supporting services
-# Only the main app is exposed to host; all other services communicate internally
-# =============================================================================
-
-# =============================================================================
-# Reusable Configuration
-# =============================================================================
-
-# Logging configuration - prevents unbounded log growth
-x-logging: &default-logging
-  logging:
-    driver: "json-file"
-    options:
-      max-size: "${LOG_MAX_SIZE:-10m}"
-      max-file: "${LOG_MAX_FILE:-3}"
-
 services:
-  # ===========================================================================
-  # PostgreSQL Database (internal only)
-  # ===========================================================================
+  # PostgreSQL Database
   postgres:
     image: postgres:16
-    container_name: docroom-postgres
-    <<: *default-logging
+    container_name: papermark-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-docroom}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-docroom}
-      POSTGRES_DB: ${POSTGRES_DB:-docroom}
-    # No ports exposed - only accessible via internal network
-    expose:
-      - "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: papermark
+      POSTGRES_DB: papermark
+    ports:
+      - "5432:5432"
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-docroom}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - docroom-network
 
-  # ===========================================================================
-  # Redis for BullMQ job queues (internal only)
-  # ===========================================================================
+  # Redis for BullMQ job queues
   redis:
     image: redis:7-alpine
-    container_name: docroom-redis
-    <<: *default-logging
-    # No ports exposed - only accessible via internal network
-    expose:
-      - "6379"
+    container_name: papermark-redis
+    ports:
+      - "6379:6379"
     volumes:
-      - ./data/redis:/data
+      - redis-data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -63,194 +36,32 @@ services:
       timeout: 5s
       retries: 5
     command: redis-server --appendonly yes
-    networks:
-      - docroom-network
 
-  # ===========================================================================
-  # Gotenberg for LibreOffice document conversion
-  # Exposed externally with basic auth for other uses
-  # ===========================================================================
+  # Gotenberg for LibreOffice document conversion (Office docs → PDF)
   gotenberg:
     image: gotenberg/gotenberg:8
-    container_name: docroom-gotenberg
-    <<: *default-logging
-    # Exposed to host for external access (protected by basic auth)
+    container_name: papermark-gotenberg
     ports:
-      - "${GOTENBERG_PORT:-3001}:3000"
+      - "3001:3000"
     restart: unless-stopped
     command:
       - "gotenberg"
       - "--api-timeout=300s"
       - "--libreoffice-disable-routes=false"
-      - "--libreoffice-restart-after=10"
-      - "--api-enable-basic-auth=true"
-    environment:
-      GOTENBERG_API_BASIC_AUTH_USERNAME: ${GOTENBERG_USERNAME:-gotenberg}
-      GOTENBERG_API_BASIC_AUTH_PASSWORD: ${GOTENBERG_PASSWORD}
-    networks:
-      - docroom-network
 
-  # ===========================================================================
-  # DocRoom Application (Next.js)
-  # ===========================================================================
-  docroom:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: docroom:latest
-    container_name: docroom-app
-    <<: *default-logging
-    environment:
-      APP_ROLE: app
-      NODE_ENV: production
-      # Database
-      POSTGRES_PRISMA_URL: postgresql://${POSTGRES_USER:-docroom}:${POSTGRES_PASSWORD:-docroom}@postgres:5432/${POSTGRES_DB:-docroom}?schema=public
-      POSTGRES_PRISMA_URL_NON_POOLING: postgresql://${POSTGRES_USER:-docroom}:${POSTGRES_PASSWORD:-docroom}@postgres:5432/${POSTGRES_DB:-docroom}?schema=public
-      # Redis
-      REDIS_URL: redis://redis:6379
-      # Document conversion (Gotenberg)
-      NEXT_PRIVATE_CONVERSION_BASE_URL: http://gotenberg:3000
-      GOTENBERG_USERNAME: ${GOTENBERG_USERNAME:-gotenberg}
-      GOTENBERG_PASSWORD: ${GOTENBERG_PASSWORD}
-      # Auth
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
-      NEXTAUTH_URL: ${NEXT_PUBLIC_BASE_URL}
-      # Public URLs (runtime injected)
-      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL}
-      NEXT_PUBLIC_MARKETING_URL: ${NEXT_PUBLIC_MARKETING_URL:-${NEXT_PUBLIC_BASE_URL}}
-      NEXT_PUBLIC_APP_BASE_HOST: ${NEXT_PUBLIC_APP_BASE_HOST}
-      NEXT_PUBLIC_APP_DOMAIN: ${NEXT_PUBLIC_APP_DOMAIN}
-      NEXT_PUBLIC_SELFHOSTED: "1"
-      NEXT_PUBLIC_UPLOAD_TRANSPORT: ${NEXT_PUBLIC_UPLOAD_TRANSPORT:-s3}
-      NEXT_PUBLIC_DISABLE_SIGNUP: ${NEXT_PUBLIC_DISABLE_SIGNUP:-false}
-      # Webhooks (optional)
-      NEXT_PUBLIC_WEBHOOK_BASE_URL: ${NEXT_PUBLIC_WEBHOOK_BASE_URL:-}
-      NEXT_PUBLIC_WEBHOOK_BASE_HOST: ${NEXT_PUBLIC_WEBHOOK_BASE_HOST:-}
-      # Storage (S3)
-      NEXT_PRIVATE_UPLOAD_BUCKET: ${NEXT_PRIVATE_UPLOAD_BUCKET}
-      NEXT_PRIVATE_UPLOAD_REGION: ${NEXT_PRIVATE_UPLOAD_REGION:-us-east-1}
-      NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID: ${NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID}
-      NEXT_PRIVATE_UPLOAD_SECRET_ACCESS_KEY: ${NEXT_PRIVATE_UPLOAD_SECRET_ACCESS_KEY}
-      NEXT_PRIVATE_UPLOAD_ENDPOINT: ${NEXT_PRIVATE_UPLOAD_ENDPOINT:-}
-      NEXT_PRIVATE_UPLOAD_DISTRIBUTION_HOST: ${NEXT_PRIVATE_UPLOAD_DISTRIBUTION_HOST:-}
-      NEXT_PRIVATE_ADVANCED_UPLOAD_BUCKET: ${NEXT_PRIVATE_ADVANCED_UPLOAD_BUCKET:-${NEXT_PRIVATE_UPLOAD_BUCKET}}
-      # Email
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      EMAIL_FROM: ${EMAIL_FROM}
-      # Security
-      NEXT_PRIVATE_DOCUMENT_PASSWORD_KEY: ${NEXT_PRIVATE_DOCUMENT_PASSWORD_KEY}
-      NEXT_PRIVATE_VERIFICATION_SECRET: ${NEXT_PRIVATE_VERIFICATION_SECRET:-}
-      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
-      # Google OAuth (optional)
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      # Slack integration (optional)
-      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
-      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
-      SLACK_APP_INSTALL_URL: ${SLACK_APP_INSTALL_URL:-}
-      SLACK_INTEGRATION_ID: ${SLACK_INTEGRATION_ID:-clslackintegration0x}
-      NEXT_PRIVATE_SLACK_ENCRYPTION_KEY: ${NEXT_PRIVATE_SLACK_ENCRYPTION_KEY:-}
-      # Tinybird analytics (optional)
-      TINYBIRD_TOKEN: ${TINYBIRD_TOKEN:-}
-    ports:
-      - "3000:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      start_period: 60s
-      retries: 3
-    networks:
-      - docroom-network
-
-  # ===========================================================================
-  # DocRoom Worker (BullMQ background jobs, internal only)
-  # ===========================================================================
-  docroom-worker:
-    image: docroom:latest
-    container_name: docroom-worker
-    <<: *default-logging
-    environment:
-      APP_ROLE: worker
-      NODE_ENV: production
-      # App URL (for internal API calls from worker to app)
-      NEXT_PUBLIC_BASE_URL: http://docroom:3000
-      NEXTAUTH_URL: http://docroom:3000
-      # Upload transport (must be s3 for Docker deployments)
-      NEXT_PUBLIC_UPLOAD_TRANSPORT: s3
-      # Self-hosted mode (enables all features)
-      NEXT_PUBLIC_SELFHOSTED: "1"
-      # Database
-      POSTGRES_PRISMA_URL: postgresql://${POSTGRES_USER:-docroom}:${POSTGRES_PASSWORD:-docroom}@postgres:5432/${POSTGRES_DB:-docroom}?schema=public
-      POSTGRES_PRISMA_URL_NON_POOLING: postgresql://${POSTGRES_USER:-docroom}:${POSTGRES_PASSWORD:-docroom}@postgres:5432/${POSTGRES_DB:-docroom}?schema=public
-      # Redis
-      REDIS_URL: redis://redis:6379
-      # Document conversion (Gotenberg)
-      NEXT_PRIVATE_CONVERSION_BASE_URL: http://gotenberg:3000
-      GOTENBERG_USERNAME: ${GOTENBERG_USERNAME:-gotenberg}
-      GOTENBERG_PASSWORD: ${GOTENBERG_PASSWORD}
-      # Storage (S3)
-      NEXT_PRIVATE_UPLOAD_BUCKET: ${NEXT_PRIVATE_UPLOAD_BUCKET}
-      NEXT_PRIVATE_UPLOAD_REGION: ${NEXT_PRIVATE_UPLOAD_REGION:-us-east-1}
-      NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID: ${NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID}
-      NEXT_PRIVATE_UPLOAD_SECRET_ACCESS_KEY: ${NEXT_PRIVATE_UPLOAD_SECRET_ACCESS_KEY}
-      NEXT_PRIVATE_UPLOAD_ENDPOINT: ${NEXT_PRIVATE_UPLOAD_ENDPOINT:-}
-      NEXT_PRIVATE_UPLOAD_DISTRIBUTION_HOST: ${NEXT_PRIVATE_UPLOAD_DISTRIBUTION_HOST:-}
-      NEXT_PRIVATE_ADVANCED_UPLOAD_BUCKET: ${NEXT_PRIVATE_ADVANCED_UPLOAD_BUCKET:-${NEXT_PRIVATE_UPLOAD_BUCKET}}
-      # Email
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      EMAIL_FROM: ${EMAIL_FROM}
-      # Security
-      NEXT_PRIVATE_DOCUMENT_PASSWORD_KEY: ${NEXT_PRIVATE_DOCUMENT_PASSWORD_KEY}
-      NEXT_PRIVATE_VERIFICATION_SECRET: ${NEXT_PRIVATE_VERIFICATION_SECRET:-}
-      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
-      # Slack integration (optional)
-      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
-      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
-      SLACK_APP_INSTALL_URL: ${SLACK_APP_INSTALL_URL:-}
-      SLACK_INTEGRATION_ID: ${SLACK_INTEGRATION_ID:-clslackintegration0x}
-      NEXT_PRIVATE_SLACK_ENCRYPTION_KEY: ${NEXT_PRIVATE_SLACK_ENCRYPTION_KEY:-}
-      # Tinybird analytics (optional)
-      TINYBIRD_TOKEN: ${TINYBIRD_TOKEN:-}
-    depends_on:
-      docroom:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - docroom-network
-
-  # ===========================================================================
   # MinIO for local S3-compatible storage (optional, for development)
   # Uncomment to use instead of external S3
-  # ===========================================================================
   # minio:
   #   image: minio/minio:latest
-  #   container_name: docroom-minio
-  #   <<: *default-logging
+  #   container_name: papermark-minio
   #   ports:
   #     - "9000:9000"   # S3 API
   #     - "9001:9001"   # Console
   #   environment:
-  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  #     MINIO_ROOT_USER: minioadmin
+  #     MINIO_ROOT_PASSWORD: minioadmin
   #   volumes:
-  #     - ./data/minio:/data
+  #     - minio-data:/data
   #   command: server /data --console-address ":9001"
   #   restart: unless-stopped
   #   healthcheck:
@@ -258,33 +69,11 @@ services:
   #     interval: 30s
   #     timeout: 20s
   #     retries: 3
-  #   networks:
-  #     - docroom-network
 
-# =============================================================================
-# Networks
-# =============================================================================
-networks:
-  docroom-network:
-    driver: bridge
-    enable_ipv6: true
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.62.0.0/16    # IPv4 subnet
-        - subnet: fd00:62::/80     # IPv6 subnet
-
-# =============================================================================
-# Data Storage
-# =============================================================================
-# Data is stored in ./data/ folder (bind mounts) instead of Docker volumes
-# This ensures data survives even with `docker-compose down -v`
-#
-# Folder structure:
-#   ./data/postgres/  - PostgreSQL database files
-#   ./data/redis/     - Redis persistence (AOF)
-#   ./data/minio/     - MinIO object storage (if enabled)
-#
-# Logging:
-#   Logs are limited to prevent unbounded growth (default: 10MB x 3 files)
-#   Override with LOG_MAX_SIZE and LOG_MAX_FILE environment variables
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  # minio-data:
+  #   driver: local
