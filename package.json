@@ -151,6 +151,7 @@
     "use-debounce": "^10.0.6",
     "vaul": "^1.1.2",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "tsx": "^4.21.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -174,12 +175,14 @@
     "prettier": "^3.7.3",
     "prettier-plugin-tailwindcss": "^0.7.1",
     "prisma": "^6.5.0",
-    "tsx": "^4.21.0",
     "typescript": "^5"
   },
   "overrides": {
     "react-notion-x": {
       "react-pdf": "8.0.2"
     }
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed-slack.ts"
   }
 }

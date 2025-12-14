@@ -102,14 +102,21 @@ async function processFileConversion(
       formData.append("downloadFrom", JSON.stringify([{ url: fileUrl }]));
       formData.append("quality", "75");
 
+      // Build headers with optional Basic Auth for Gotenberg
+      const headers: Record<string, string> = {};
+      if (process.env.GOTENBERG_USERNAME && process.env.GOTENBERG_PASSWORD) {
+        const credentials = Buffer.from(
+          `${process.env.GOTENBERG_USERNAME}:${process.env.GOTENBERG_PASSWORD}`,
+        ).toString("base64");
+        headers.Authorization = `Basic ${credentials}`;
+      }
+
       const response = await fetch(
         `${process.env.NEXT_PRIVATE_CONVERSION_BASE_URL}/forms/libreoffice/convert`,
         {
           method: "POST",
           body: formData,
-          headers: {
-            Authorization: `Basic ${process.env.NEXT_PRIVATE_INTERNAL_AUTH_TOKEN}`,
-          },
+          headers,
         },
       );
 

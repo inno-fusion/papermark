@@ -2,6 +2,9 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// Fixed ID for Slack integration - same across all instances
+const SLACK_INTEGRATION_FIXED_ID = "clslackintegration0x";
+
 async function main() {
   console.log("Seeding Slack integration...");
 
@@ -9,11 +12,12 @@ async function main() {
     where: { slug: "slack" },
     update: {},
     create: {
+      id: SLACK_INTEGRATION_FIXED_ID,
       name: "Slack",
       slug: "slack",
       description:
         "Get real-time notifications in Slack when documents are viewed, downloaded, or datarooms are accessed.",
-      developer: "Papermark",
+      developer: "0xMetaLabs",
       website: "https://slack.com",
       logo: "https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png",
       verified: true,

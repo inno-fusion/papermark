@@ -62,3 +62,7 @@ lib/emails/marketing
 
 # changelog
 changelog
+.env.mainapp
+
+# Docker data volumes (bind mounts)
+data/
