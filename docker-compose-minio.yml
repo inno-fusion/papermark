@@ -1,0 +1,145 @@
+version: '3.8'
+
+# =============================================================================
+# MinIO Standalone - Shared S3-Compatible Object Storage
+# =============================================================================
+# A centralized MinIO instance that can be used by multiple applications:
+# DocRoom, Documenso, Cal.com, and any other S3-compatible app.
+#
+# Usage:
+#   docker-compose -f docker-compose-minio.yml up -d
+#
+# Access:
+#   - S3 API: http://localhost:9002 (or http://minio:9000 from Docker network)
+#   - Console: http://localhost:9003
+#
+# Credentials:
+#   - User: minioadmin
+#   - Password: minioadmin123
+# =============================================================================
+
+# =============================================================================
+# Reusable Configuration
+# =============================================================================
+
+# Logging configuration - prevents unbounded log growth
+x-logging: &default-logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  # ===========================================================================
+  # MinIO Object Storage
+  # ===========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    hostname: minio
+    <<: *default-logging
+    ports:
+      - "9002:9000"   # S3 API
+      - "9003:9001"   # Console UI
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      # Allow CORS from all origins (required for browser uploads)
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+      # Set this to your public MinIO URL for presigned URLs to work
+      # MINIO_SERVER_URL: https://minio.yourdomain.com
+    volumes:
+      - ./data/minio:/data
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - minio-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  minio-network:
+    name: minio-network
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.63.0.0/16    # IPv4 subnet
+        - subnet: fd00:63::/80     # IPv6 subnet
+
+# =============================================================================
+# Data Storage
+# =============================================================================
+# Data is stored in ./data/ folder (bind mounts) instead of Docker volumes
+# This ensures data survives even with `docker-compose down -v`
+#
+# Folder structure:
+#   ./data/minio/  - MinIO object storage files
+#
+# =============================================================================
+# Connecting Other Applications
+# =============================================================================
+# Add this to your other docker-compose files:
+#
+#   networks:
+#     minio-network:
+#       external: true
+#
+#   services:
+#     your-app:
+#       networks:
+#         - your-network
+#         - minio-network
+#
+# =============================================================================
+# Application Configuration
+# =============================================================================
+# From Docker containers: http://minio:9000
+# From host machine:      http://localhost:9002
+#
+# Credentials:
+#   Access Key: minioadmin
+#   Secret Key: minioadmin123
+#   Region:     us-east-1
+#
+# =============================================================================
+# PRODUCTION HTTPS SETUP (Required for presigned URLs)
+# =============================================================================
+# Presigned URLs are returned to browsers, so they MUST use a publicly
+# accessible HTTPS URL. Set up a reverse proxy (nginx/caddy) with SSL.
+#
+# Example nginx configuration (minio.yourdomain.com):
+#
+#   server {
+#       listen 443 ssl http2;
+#       server_name minio.yourdomain.com;
+#
+#       ssl_certificate /path/to/cert.pem;
+#       ssl_certificate_key /path/to/key.pem;
+#
+#       # Allow large uploads
+#       client_max_body_size 1000m;
+#
+#       location / {
+#           proxy_pass http://localhost:9002;
+#           proxy_set_header Host $host;
+#           proxy_set_header X-Real-IP $remote_addr;
+#           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#           proxy_set_header X-Forwarded-Proto $scheme;
+#       }
+#   }
+#
+# Then set in your app's .env:
+#   NEXT_PRIVATE_UPLOAD_ENDPOINT=https://minio.yourdomain.com
+#
+# And uncomment MINIO_SERVER_URL in this file:
+#   MINIO_SERVER_URL: https://minio.yourdomain.com
+# =============================================================================
