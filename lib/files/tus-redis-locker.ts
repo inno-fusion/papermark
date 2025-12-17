@@ -1,5 +1,7 @@
 import { ERRORS, Lock, Locker, RequestRelease } from "@tus/utils";
-import { Redis } from "@upstash/redis";
+import type Redis from "ioredis";
+
+import { getLockerRedisClient, isRedisConfigured } from "@/lib/redis";
 
 /**
  * RedisLocker is an implementation of the Locker interface that manages locks in key-value store using Redis.
@@ -20,32 +22,54 @@ import { Redis } from "@upstash/redis";
  * - The `lock` method implements a wait mechanism, allowing a lock request to either succeed when the lock becomes available,
  *   or fail after the timeout period.
  * - The `unlock` method releases a lock, making the resource available for other requests.
+ *
+ * Note: This locker supports both ioredis (standard Redis) and Upstash REST API.
+ * When using ioredis, it provides full locking functionality.
+ * When Redis is not configured, it uses in-memory locking (single-process only).
  */
 
 interface RedisLockerOptions {
   acquireLockTimeout?: number;
-  redisClient: Redis;
 }
+
+// In-memory lock store for when Redis is not available
+const inMemoryLocks = new Map<string, { locked: boolean; requestRelease: boolean }>();
 
 export class RedisLocker implements Locker {
   timeout: number;
-  redisClient: Redis;
+  private redisClient: Redis | null;
 
-  constructor(options: RedisLockerOptions) {
+  constructor(options: RedisLockerOptions = {}) {
     this.timeout = options.acquireLockTimeout ?? 1000 * 30; // default: 30 seconds
-    this.redisClient = options.redisClient;
+    this.redisClient = getLockerRedisClient();
+
+    if (!this.redisClient && isRedisConfigured()) {
+      console.warn(
+        "[TUS Locker] Redis is configured but locker client unavailable. Using in-memory locking.",
+      );
+    } else if (!this.redisClient) {
+      console.warn(
+        "[TUS Locker] Redis not configured. Using in-memory locking (single-process only).",
+      );
+    }
   }
 
   newLock(id: string) {
-    return new RedisLock(id, this, this.timeout);
+    if (this.redisClient) {
+      return new IoRedisLock(id, this.redisClient, this.timeout);
+    }
+    return new InMemoryLock(id, this.timeout);
   }
 }
 
-class RedisLock implements Lock {
+/**
+ * Redis-based lock using ioredis
+ */
+class IoRedisLock implements Lock {
   constructor(
     private id: string,
-    private locker: RedisLocker,
-    private timeout: number = 1000 * 30, // default: 30 seconds
+    private redisClient: Redis,
+    private timeout: number = 1000 * 30,
   ) {}
 
   async lock(
@@ -75,21 +99,28 @@ class RedisLock implements Lock {
     }
 
     const lockKey = `tus-lock-${id}`;
-    const lock = await this.locker.redisClient.set(lockKey, "locked", {
-      nx: true,
-      px: this.timeout,
-    });
+    // Use SET with NX and PX options for atomic lock acquisition
+    const lock = await this.redisClient.set(
+      lockKey,
+      "locked",
+      "PX",
+      this.timeout,
+      "NX",
+    );
 
-    if (lock) {
+    if (lock === "OK") {
       // Register a release request flag in Redis
-      await this.locker.redisClient.set(`requestRelease:${lockKey}`, "true", {
-        px: this.timeout,
-      });
+      await this.redisClient.set(
+        `requestRelease:${lockKey}`,
+        "true",
+        "PX",
+        this.timeout,
+      );
       return true;
     }
 
     // Check if the release was requested
-    const releaseRequestStr: string | null = await this.locker.redisClient.get(
+    const releaseRequestStr = await this.redisClient.get(
       `requestRelease:${lockKey}`,
     );
     if (releaseRequestStr === "true") {
@@ -109,13 +140,100 @@ class RedisLock implements Lock {
 
   async unlock(): Promise<void> {
     const lockKey = `tus-lock-${this.id}`;
-    const lockExists = await this.locker.redisClient.del(lockKey);
+    const lockExists = await this.redisClient.del(lockKey);
     if (!lockExists) {
       throw new Error("Releasing an unlocked lock!");
     }
 
     // Clean up the request release entry
-    await this.locker.redisClient.del(`requestRelease:${lockKey}`);
+    await this.redisClient.del(`requestRelease:${lockKey}`);
+  }
+
+  protected waitTimeout(signal: AbortSignal) {
+    return new Promise<boolean>((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve(false);
+      }, this.timeout);
+
+      const abortListener = () => {
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", abortListener);
+        resolve(false);
+      };
+      signal.addEventListener("abort", abortListener);
+    });
+  }
+}
+
+/**
+ * In-memory lock for single-process deployments without Redis
+ */
+class InMemoryLock implements Lock {
+  constructor(
+    private id: string,
+    private timeout: number = 1000 * 30,
+  ) {}
+
+  async lock(
+    signal: AbortSignal,
+    requestRelease: RequestRelease,
+  ): Promise<void> {
+    const lock = await Promise.race([
+      this.waitTimeout(signal),
+      this.acquireLock(this.id, requestRelease, signal),
+    ]);
+
+    if (!lock) {
+      throw ERRORS.ERR_LOCK_TIMEOUT;
+    }
+  }
+
+  protected async acquireLock(
+    id: string,
+    requestRelease: RequestRelease,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    if (signal.aborted) {
+      return false;
+    }
+
+    const lockKey = `tus-lock-${id}`;
+    const existing = inMemoryLocks.get(lockKey);
+
+    if (!existing || !existing.locked) {
+      // Acquire lock
+      inMemoryLocks.set(lockKey, { locked: true, requestRelease: true });
+
+      // Auto-expire the lock after timeout
+      setTimeout(() => {
+        const current = inMemoryLocks.get(lockKey);
+        if (current?.locked) {
+          inMemoryLocks.delete(lockKey);
+        }
+      }, this.timeout);
+
+      return true;
+    }
+
+    // Lock exists, check if release was requested
+    if (existing.requestRelease) {
+      await requestRelease?.();
+    }
+
+    // Wait and retry
+    await new Promise((resolve) => setImmediate(resolve));
+    return this.acquireLock(id, requestRelease, signal);
+  }
+
+  async unlock(): Promise<void> {
+    const lockKey = `tus-lock-${this.id}`;
+    const existing = inMemoryLocks.get(lockKey);
+
+    if (!existing || !existing.locked) {
+      throw new Error("Releasing an unlocked lock!");
+    }
+
+    inMemoryLocks.delete(lockKey);
   }
 
   protected waitTimeout(signal: AbortSignal) {

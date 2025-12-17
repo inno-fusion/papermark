@@ -71,6 +71,7 @@ export default async function handler(
 
     return res.status(200).json({ url, key, docId, fileName: slugifiedName });
   } catch (error) {
-    return res.status(500).json({ error: "Internal server error" });
+    console.error("[S3 Presigned URL Error]", error);
+    return res.status(500).json({ error: "Internal server error", details: error instanceof Error ? error.message : "Unknown error" });
   }
 }
