@@ -25,6 +25,13 @@ const oAuthCallbackSchema = z.object({
 export const GET = async (req: Request) => {
   const env = getSlackEnv();
 
+  if (!env) {
+    return NextResponse.json(
+      { error: "Slack integration is not configured" },
+      { status: 503 },
+    );
+  }
+
   let team: Pick<Team, "id" | "plan"> | null = null;
 
   try {

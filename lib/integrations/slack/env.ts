@@ -9,22 +9,52 @@ export const envSchema = z.object({
 
 type SlackEnv = z.infer<typeof envSchema>;
 
-let env: SlackEnv | undefined;
+let env: SlackEnv | null | undefined;
 
-export const getSlackEnv = () => {
-  if (env) {
+/**
+ * Check if Slack integration is configured
+ */
+export const isSlackConfigured = (): boolean => {
+  return !!(
+    process.env.SLACK_CLIENT_ID &&
+    process.env.SLACK_CLIENT_SECRET &&
+    process.env.SLACK_INTEGRATION_ID
+  );
+};
+
+/**
+ * Get Slack environment variables.
+ * Returns null if Slack is not configured.
+ */
+export const getSlackEnv = (): SlackEnv | null => {
+  if (env !== undefined) {
     return env;
   }
 
+  // Check if any Slack vars are set
+  const hasAnySlackVars =
+    process.env.SLACK_CLIENT_ID ||
+    process.env.SLACK_CLIENT_SECRET ||
+    process.env.SLACK_INTEGRATION_ID;
+
+  // If no Slack vars are set, Slack is simply not configured (graceful)
+  if (!hasAnySlackVars) {
+    env = null;
+    return null;
+  }
+
+  // If some vars are set, validate all required vars are present
   const parsed = envSchema.safeParse(process.env);
 
   if (!parsed.success) {
-    throw new Error(
-      "Slack app environment variables are not configured properly.",
+    console.warn(
+      "[Slack] Partially configured - some env vars are missing:",
+      parsed.error.flatten().fieldErrors,
     );
+    env = null;
+    return null;
   }
 
   env = parsed.data;
-
   return env;
 };
