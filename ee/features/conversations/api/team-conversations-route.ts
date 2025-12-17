@@ -1,12 +1,15 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
-import { runs } from "@trigger.dev/sdk/v3";
 import { waitUntil } from "@vercel/functions";
 import { getServerSession } from "next-auth/next";
 
 import prisma from "@/lib/prisma";
-import { sendConversationMessageNotificationTask } from "@/lib/trigger/conversation-message-notification";
+import {
+  addJobWithTags,
+  conversationNotificationQueue,
+} from "@/lib/queues";
+import { cancelPendingConversationNotifications } from "@/lib/queues/helpers";
 import { CustomUser } from "@/lib/types";
 
 import {
@@ -529,34 +532,30 @@ const routeHandlers = {
         userId,
       });
 
-      // Get all delayed and queued runs for this dataroom
-      const allRuns = await runs.list({
-        taskIdentifier: ["send-conversation-message-notification"],
-        tag: [`conversation_${conversationId}`],
-        status: ["DELAYED", "QUEUED"],
-        period: "5m",
-      });
+      // Cancel any existing pending notification for this conversation
+      await cancelPendingConversationNotifications(conversationId);
 
-      // Cancel any existing unsent notification runs for this dataroom
-      await Promise.all(allRuns.data.map((run) => runs.cancel(run.id)));
-
+      // Queue new notification with 5 minute delay
       waitUntil(
-        sendConversationMessageNotificationTask.trigger(
+        addJobWithTags(
+          conversationNotificationQueue,
+          `conversation-viewer-${conversationId}-${message.id}`,
           {
             dataroomId,
             messageId: message.id,
             conversationId,
             senderUserId: userId,
             teamId,
+            notificationType: "viewer" as const,
           },
           {
-            idempotencyKey: `conversation-notification-${teamId}-${dataroomId}-${conversationId}-${message.id}`,
+            delay: 5 * 60 * 1000, // 5 minutes
+            jobId: `conversation-notification-${teamId}-${dataroomId}-${conversationId}-${message.id}`,
             tags: [
               `team_${teamId}`,
               `dataroom_${dataroomId}`,
               `conversation_${conversationId}`,
             ],
-            delay: new Date(Date.now() + 5 * 60 * 1000), // 5 minute delay
           },
         ),
       );

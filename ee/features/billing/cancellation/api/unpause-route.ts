@@ -2,11 +2,11 @@ import { NextApiRequest, NextApiResponse } from "next";
 
 import { stripeInstance } from "@/ee/stripe";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
-import { runs } from "@trigger.dev/sdk/v3";
 import { waitUntil } from "@vercel/functions";
 import { getServerSession } from "next-auth/next";
 
 import prisma from "@/lib/prisma";
+import { cancelPendingBillingJobs } from "@/lib/queues/helpers";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
 
@@ -112,21 +112,10 @@ export async function handleRoute(req: NextApiRequest, res: NextApiResponse) {
         },
       });
 
-      // Get all delayed and queued runs for this team (both notification and automatic unpause)
-      const allRuns = await runs.list({
-        taskIdentifier: [
-          "send-pause-resume-notification",
-          "automatic-unpause-subscription",
-        ],
-        tag: [`team_${teamId}`],
-        status: ["DELAYED", "QUEUED"],
-        period: "90d",
-      });
-
-      // Cancel any existing unsent notification and automatic unpause runs
+      // Cancel any existing pending billing jobs (pause/resume notifications and automatic unpause)
       waitUntil(
         Promise.all([
-          allRuns.data.map((run) => runs.cancel(run.id)),
+          cancelPendingBillingJobs(teamId),
           log({
             message: `Team ${teamId} (${team.plan}) manually unpaused their subscription using ${isOldPauseMethod ? "pause_collection method" : "coupon method"}${!isOldPauseMethod ? (isInOriginalBillingCycle ? " within original billing cycle" : " with billing cycle reset") : ""}.`,
             type: "info",

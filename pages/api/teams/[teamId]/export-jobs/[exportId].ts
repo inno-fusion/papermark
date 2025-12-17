@@ -3,8 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth/next";
 
-import { runs } from "@trigger.dev/sdk/v3";
-
+import { cancelExportJob } from "@/lib/queues/helpers";
 import { jobStore } from "@/lib/redis-job-store";
 import { CustomUser } from "@/lib/types";
 
@@ -87,14 +86,13 @@ export default async function handler(
         });
       }
 
-      // Cancel the trigger run if we have the run ID
+      // Cancel the BullMQ job if we have the job ID
       if (exportJob.triggerRunId) {
         try {
-          
-          await runs.cancel(exportJob.triggerRunId);
+          await cancelExportJob(exportJob.triggerRunId);
         } catch (error) {
-          console.error("Failed to cancel trigger run:", error);
-          // Continue with local cancellation even if trigger cancellation fails
+          console.error("Failed to cancel export job:", error);
+          // Continue with local cancellation even if job cancellation fails
         }
       }
 
