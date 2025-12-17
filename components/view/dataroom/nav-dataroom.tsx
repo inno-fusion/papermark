@@ -140,13 +140,9 @@ export default function DataroomNav({
                   alt="Logo"
                 />
               ) : (
-                <Link
-                  href={`https://www.papermark.com/home?utm_campaign=navbar&utm_medium=navbar&utm_source=papermark-${linkId}`}
-                  target="_blank"
-                  className="text-2xl font-bold tracking-tighter text-white"
-                >
-                  Papermark
-                </Link>
+                <span className="text-2xl font-bold tracking-tighter text-white">
+                  DocRoom
+                </span>
               )}
             </div>
           </div>

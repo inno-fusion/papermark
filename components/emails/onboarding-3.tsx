@@ -17,12 +17,12 @@ const Onboarding3Email = () => {
   return (
     <Html>
       <Head />
-      <Preview>The document sharing infrastructure for the modern web</Preview>
+      <Preview>Secure document sharing with built-in analytics</Preview>
       <Tailwind>
         <Body className="mx-auto my-auto bg-white font-sans">
           <Container className="mx-auto my-10 w-[465px] p-5">
             <Text className="mx-0 mb-8 mt-4 p-0 text-center text-2xl font-normal">
-              <span className="font-bold tracking-tighter">Papermark</span>
+              <span className="font-bold tracking-tighter">DocRoom</span>
             </Text>
             <Text className="mx-0 mb-8 mt-4 p-0 text-center text-2xl font-normal">
               Watch the views come in real-time
@@ -31,8 +31,8 @@ const Onboarding3Email = () => {
               You need to know who viewed your documents!
             </Text>
             <Text className="text-sm">
-              With Papermark you can track progress on each page of your
-              document and other analytics:
+              With DocRoom you can track progress on each page of your document
+              and other analytics:
             </Text>
             <ul className="list-inside list-disc text-sm">
               <li>
@@ -47,7 +47,7 @@ const Onboarding3Email = () => {
             <Section className="my-8 text-center">
               <Button
                 className="rounded bg-black text-center text-xs font-semibold text-white no-underline"
-                href={`https://app.papermark.com/documents?utm_source=onboarding&utm_medium=email&utm_campaign=20240723&utm_content=upload_documents`}
+                href={`${process.env.NEXT_PUBLIC_BASE_URL}/documents`}
                 style={{ padding: "12px 20px" }}
               >
                 View your document activity
@@ -59,12 +59,11 @@ const Onboarding3Email = () => {
             <Hr />
             <Section className="mt-8 text-gray-400">
               <Text className="text-xs">
-                © {new Date().getFullYear()} Papermark, Inc. All rights
-                reserved.
+                © {new Date().getFullYear()} 0xMetaLabs. All rights reserved.
               </Text>
               <Text className="text-xs">
                 If you have any feedback or questions about this email, simply
-                reply to it. I&apos;d love to hear from you!{" "}
+                reply to it.
               </Text>
 
               <Text className="text-xs">Stop this onboarding sequence</Text>

@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import { useTeam } from "@/context/team-context";
 import { toast } from "sonner";
 import useSWR from "swr";
+import { DEFAULT_LINK_DOMAIN } from "@/lib/constants";
 import { fetcher } from "@/lib/utils";
 import AppLayout from "@/components/layouts/app";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ export default function NewWorkflowPage() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [domain, setDomain] = useState<string>("papermark.com");
+  const [domain, setDomain] = useState<string>(DEFAULT_LINK_DOMAIN);
   const [slug, setSlug] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -46,7 +47,7 @@ export default function NewWorkflowPage() {
       return;
     }
 
-    if (domain !== "papermark.com" && !slug.trim()) {
+    if (domain !== DEFAULT_LINK_DOMAIN && !slug.trim()) {
       toast.error("Entry link slug is required for custom domains");
       return;
     }
@@ -62,8 +63,8 @@ export default function NewWorkflowPage() {
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || undefined,
-          domain: domain === "papermark.com" ? undefined : domain,
-          slug: domain === "papermark.com" ? undefined : slug.trim(),
+          domain: domain === DEFAULT_LINK_DOMAIN ? undefined : domain,
+          slug: domain === DEFAULT_LINK_DOMAIN ? undefined : slug.trim(),
         }),
       });
 
@@ -133,10 +134,10 @@ export default function NewWorkflowPage() {
                 <Label htmlFor="domain">Domain</Label>
                 <Select value={domain} onValueChange={setDomain}>
                   <SelectTrigger id="domain">
-                    <SelectValue placeholder="papermark.com (default)" />
+                    <SelectValue placeholder={`${DEFAULT_LINK_DOMAIN} (default)`} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="papermark.com">papermark.com</SelectItem>
+                    <SelectItem value={DEFAULT_LINK_DOMAIN}>{DEFAULT_LINK_DOMAIN}</SelectItem>
                     {domains?.map((d) => (
                       <SelectItem key={d.id} value={d.slug}>
                         {d.slug}
@@ -146,7 +147,7 @@ export default function NewWorkflowPage() {
                 </Select>
               </div>
 
-              {domain !== "papermark.com" && (
+              {domain !== DEFAULT_LINK_DOMAIN && (
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="slug">Slug *</Label>
@@ -170,9 +171,9 @@ export default function NewWorkflowPage() {
                 </>
               )}
 
-              {domain === "papermark.com" && (
+              {domain === DEFAULT_LINK_DOMAIN && (
                 <p className="text-xs text-muted-foreground">
-                  Entry URL will be generated automatically (e.g., papermark.com/view/clxxx...)
+                  Entry URL will be generated automatically (e.g., {DEFAULT_LINK_DOMAIN}/view/clxxx...)
                 </p>
               )}
             </div>

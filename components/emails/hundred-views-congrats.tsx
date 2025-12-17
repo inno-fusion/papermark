@@ -21,24 +21,17 @@ const HundredViewsCongratsEmail = ({
         <Body className="font-sans text-sm">
           <Text>Hi{name && ` ${name}`},</Text>
           <Text>
-            I&apos;m Marc, founder of Papermark. Congrats on 100 views on your
-            documents.
+            Congratulations on reaching 100 views on your documents with
+            DocRoom!
           </Text>
-          <Text>Would you help others discover us too?</Text>
           <Text>
-            <Link
-              href="https://www.g2.com/products/papermark/reviews"
-              target="_blank"
-              className="text-blue-500 underline"
-            >
-              Leave a review on G2 →
-            </Link>
+            We&apos;re excited to see your documents getting engagement. Keep
+            sharing!
           </Text>
-          <Text>Small gift from us inside.</Text>
           <Text>
-            Thanks so much,
+            Thanks,
             <br />
-            Marc
+            The DocRoom Team
           </Text>
         </Body>
       </Tailwind>

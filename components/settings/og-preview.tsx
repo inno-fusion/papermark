@@ -23,7 +23,7 @@ export default function Preview({
     metaFavicon: favicon,
   } = data;
 
-  const hostname = "papermark.com";
+  const hostname = process.env.NEXT_PUBLIC_APP_DOMAIN || "docroom.io";
 
   return (
     <div>

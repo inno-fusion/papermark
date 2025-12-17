@@ -1,0 +1,625 @@
+# Self-Hosting Papermark
+
+This guide covers how to self-host Papermark with all its features.
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Quick Start](#quick-start)
+3. [Infrastructure Setup](#infrastructure-setup)
+4. [Environment Variables](#environment-variables)
+5. [Database Setup](#database-setup)
+6. [Running the Application](#running-the-application)
+7. [Integrations Setup](#integrations-setup)
+8. [Production Deployment](#production-deployment)
+9. [Troubleshooting](#troubleshooting)
+
+---
+
+## Prerequisites
+
+- **Node.js** 18.18.0 or higher
+- **Docker** and **Docker Compose** (for infrastructure)
+- **S3-compatible storage** (AWS S3, MinIO, Cloudflare R2, etc.)
+- **SMTP server** (optional, for emails)
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/mfts/papermark.git
+cd papermark
+
+# 2. Install dependencies
+npm install
+
+# 3. Copy environment file
+cp .env.example .env
+
+# 4. Start infrastructure (PostgreSQL, Redis, Gotenberg)
+docker-compose up -d
+
+# 5. Run database migrations
+npx prisma migrate deploy
+
+# 6. Seed integrations (optional, for Slack)
+npx tsx prisma/seed-slack.ts
+
+# 7. Start the application and workers
+npm run dev:all
+```
+
+---
+
+## Infrastructure Setup
+
+### Docker Compose Services
+
+The `docker-compose.yml` provides all required infrastructure:
+
+```yaml
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: papermark
+      POSTGRES_DB: papermark
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Redis for BullMQ job queues
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # Gotenberg for Office document conversion
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    ports:
+      - "3001:3000"
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+### Start Infrastructure
+
+```bash
+# Start all services
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+```
+
+### Service URLs
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| PostgreSQL | `postgresql://postgres:papermark@localhost:5432/papermark` | Database |
+| Redis | `redis://localhost:6379` | Job queues, rate limiting, file locking |
+| Gotenberg | `http://localhost:3001` | Document conversion |
+
+> **Note**: Redis can also use Upstash REST API for serverless deployments. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` instead of `REDIS_URL`.
+
+---
+
+## Environment Variables
+
+### Required Variables
+
+```bash
+# ===================
+# SELF-HOSTED MODE
+# ===================
+
+# Enable self-hosted mode (removes all plan limits)
+NEXT_PUBLIC_SELFHOSTED=1
+
+# ===================
+# CORE CONFIGURATION
+# ===================
+
+# Auth
+NEXTAUTH_SECRET=<generate with: openssl rand -base64 32>
+NEXTAUTH_URL=http://localhost:3000
+
+# App URLs
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
+NEXT_PUBLIC_MARKETING_URL=http://localhost:3000
+
+# ===================
+# DATABASE
+# ===================
+
+POSTGRES_PRISMA_URL=postgresql://postgres:papermark@localhost:5432/papermark
+# For connection pooling (optional, can be same as above for local dev)
+POSTGRES_PRISMA_URL_NON_POOLING=postgresql://postgres:papermark@localhost:5432/papermark
+
+# ===================
+# REDIS
+# ===================
+
+# Option 1: Standard Redis (recommended for self-hosting)
+REDIS_URL=redis://localhost:6379
+
+# Option 2: Upstash REST API (for serverless deployments)
+# UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
+# UPSTASH_REDIS_REST_TOKEN=xxx
+
+# Note: REDIS_URL takes priority if both are set
+# Redis is used for: BullMQ job queues, rate limiting, TUS file locking
+
+# ===================
+# STORAGE (S3)
+# ===================
+
+NEXT_PUBLIC_UPLOAD_TRANSPORT=s3
+NEXT_PRIVATE_UPLOAD_BUCKET=your-bucket-name
+NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID=your-access-key
+NEXT_PRIVATE_UPLOAD_SECRET_ACCESS_KEY=your-secret-key
+NEXT_PRIVATE_UPLOAD_REGION=us-east-1
+# For S3-compatible services (MinIO, R2, etc.)
+# NEXT_PRIVATE_UPLOAD_ENDPOINT=https://your-endpoint.com
+NEXT_PRIVATE_UPLOAD_DISTRIBUTION_HOST=your-bucket.s3.us-east-1.amazonaws.com
+
+# ===================
+# SECURITY
+# ===================
+
+# Internal API key for worker communication
+INTERNAL_API_KEY=<generate with: openssl rand -hex 32>
+
+# Document password encryption
+NEXT_PRIVATE_DOCUMENT_PASSWORD_KEY=<generate with: openssl rand -base64 32>
+```
+
+### Optional Variables
+
+```bash
+# ===================
+# DOCUMENT CONVERSION
+# ===================
+
+# Gotenberg (for Office docs → PDF)
+NEXT_PRIVATE_CONVERSION_BASE_URL=http://localhost:3001
+
+# CloudConvert (for CAD/Keynote files - requires account)
+# NEXT_PRIVATE_CONVERT_API_URL=https://api.cloudconvert.com/v2
+# NEXT_PRIVATE_CONVERT_API_KEY=your-api-key
+
+# ===================
+# AUTHENTICATION PROVIDERS
+# ===================
+
+# Google OAuth (recommended)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# ===================
+# EMAIL (SMTP or Resend)
+# ===================
+
+# Option 1: SMTP (Recommended for self-hosting)
+# SMTP_HOST=smtp.email.ap-mumbai-1.oci.oraclecloud.com  # OCI
+# SMTP_HOST=email-smtp.us-east-1.amazonaws.com          # AWS SES
+# SMTP_PORT=587
+# SMTP_USER=
+# SMTP_PASSWORD=
+# EMAIL_FROM=Papermark <noreply@yourdomain.com>
+
+# Option 2: Resend (cloud service)
+# RESEND_API_KEY=
+
+# ===================
+# SLACK INTEGRATION
+# ===================
+
+SLACK_CLIENT_ID=
+SLACK_CLIENT_SECRET=
+SLACK_APP_INSTALL_URL=https://slack.com/oauth/v2/authorize?client_id=YOUR_ID&scope=channels:read,chat:write,chat:write.public,groups:read,team:read,users:read
+SLACK_INTEGRATION_ID=  # Generated by seed script
+NEXT_PRIVATE_SLACK_ENCRYPTION_KEY=<generate with: openssl rand -hex 32>
+```
+
+---
+
+## Database Setup
+
+### Initial Setup
+
+```bash
+# Generate Prisma client
+npx prisma generate
+
+# Run all migrations
+npx prisma migrate deploy
+```
+
+### When to Run Migrations
+
+| Scenario | Command |
+|----------|---------|
+| Fresh install | `npx prisma migrate deploy` |
+| After pulling updates | `npx prisma migrate deploy` |
+| Development (create new migration) | `npx prisma migrate dev` |
+| Reset database (dev only) | `npx prisma migrate reset` |
+
+### Seed Data
+
+```bash
+# Seed Slack integration (creates Integration record)
+npx tsx prisma/seed-slack.ts
+
+# The script outputs SLACK_INTEGRATION_ID - add it to your .env
+```
+
+### Database Management
+
+```bash
+# Open Prisma Studio (GUI)
+npx prisma studio
+
+# Check migration status
+npx prisma migrate status
+```
+
+---
+
+## Running the Application
+
+### Development Mode
+
+```bash
+# Option 1: Run app and workers together
+npm run dev:all
+
+# Option 2: Run separately (two terminals)
+npm run dev           # Terminal 1: Next.js app
+npm run workers:dev   # Terminal 2: BullMQ workers
+```
+
+### Production Mode
+
+```bash
+# Build the application
+npm run build
+
+# Start Next.js
+npm start
+
+# Start workers (separate process)
+npm run workers
+```
+
+### Available Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `npm run dev` | Start Next.js development server |
+| `npm run dev:all` | Start app + workers together |
+| `npm run workers` | Start BullMQ workers |
+| `npm run workers:dev` | Start workers with hot reload |
+| `npm run build` | Build for production |
+| `npm start` | Start production server |
+
+---
+
+## Integrations Setup
+
+### Email Configuration
+
+Papermark supports two email providers. **SMTP is recommended for self-hosting** as it works with AWS SES, OCI Email, or any SMTP server.
+
+#### Option 1: SMTP (Recommended)
+
+```bash
+# AWS SES
+SMTP_HOST=email-smtp.us-east-1.amazonaws.com
+SMTP_PORT=587
+SMTP_USER=your-smtp-username
+SMTP_PASSWORD=your-smtp-password
+EMAIL_FROM=Papermark <noreply@yourdomain.com>
+
+# OCI Email
+SMTP_HOST=smtp.email.ap-mumbai-1.oci.oraclecloud.com
+SMTP_PORT=587
+SMTP_USER=your-oci-smtp-user
+SMTP_PASSWORD=your-oci-smtp-password
+EMAIL_FROM=Papermark <noreply@yourdomain.com>
+```
+
+**Provider-specific setup:**
+
+| Provider | SMTP Host | Notes |
+|----------|-----------|-------|
+| AWS SES | `email-smtp.{region}.amazonaws.com` | Requires verified domain/email |
+| OCI Email | `smtp.email.{region}.oci.oraclecloud.com` | Create SMTP credentials in console |
+| SendGrid | `smtp.sendgrid.net` | Use API key as password |
+| Mailgun | `smtp.mailgun.org` | Domain-specific credentials |
+
+#### Option 2: Resend (Cloud)
+
+```bash
+RESEND_API_KEY=re_xxxxxxxx
+EMAIL_FROM=Papermark <noreply@yourdomain.com>
+```
+
+#### Verify Email Configuration
+
+The application auto-detects the provider:
+- If `SMTP_HOST` and `SMTP_PORT` are set → SMTP is used
+- Otherwise if `RESEND_API_KEY` is set → Resend is used
+
+---
+
+### Slack Integration
+
+1. **Create Slack App**
+   - Go to [api.slack.com/apps](https://api.slack.com/apps)
+   - Click "Create New App" → "From scratch"
+   - Name: `Papermark`, Workspace: your workspace
+
+2. **Configure OAuth**
+   - Go to "OAuth & Permissions"
+   - Add Redirect URL: `{YOUR_BASE_URL}/api/integrations/slack/oauth/callback`
+   - Add Bot Token Scopes:
+     - `channels:read`
+     - `chat:write`
+     - `chat:write.public`
+     - `groups:read`
+     - `team:read`
+     - `users:read`
+
+3. **Get Credentials**
+   - Go to "Basic Information"
+   - Copy Client ID and Client Secret
+
+4. **Configure Environment**
+   ```bash
+   SLACK_CLIENT_ID=your-client-id
+   SLACK_CLIENT_SECRET=your-client-secret
+   SLACK_APP_INSTALL_URL=https://slack.com/oauth/v2/authorize?client_id=YOUR_CLIENT_ID&scope=channels:read,chat:write,chat:write.public,groups:read,team:read,users:read
+   NEXT_PRIVATE_SLACK_ENCRYPTION_KEY=<openssl rand -hex 32>
+   ```
+
+5. **Create Database Record**
+   ```bash
+   npx tsx prisma/seed-slack.ts
+   # Copy the output SLACK_INTEGRATION_ID to your .env
+   ```
+
+---
+
+## Production Deployment
+
+### Recommended Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Production Setup                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐   │
+│  │   Next.js    │    │   Workers    │    │   Gotenberg  │   │
+│  │   (App)      │    │   (BullMQ)   │    │  (Optional)  │   │
+│  └──────────────┘    └──────────────┘    └──────────────┘   │
+│         │                   │                               │
+│         ▼                   ▼                               │
+│  ┌──────────────┐    ┌──────────────┐                       │
+│  │  PostgreSQL  │    │    Redis     │                       │
+│  │  (Managed)   │    │  (Managed)   │                       │
+│  └──────────────┘    └──────────────┘                       │
+│         │                                                   │
+│         ▼                                                   │
+│  ┌──────────────┐                                           │
+│  │     S3       │                                           │
+│  │  (Storage)   │                                           │
+│  └──────────────┘                                           │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Deployment Options
+
+#### Option 1: Docker (Recommended)
+
+```dockerfile
+# Dockerfile for Next.js app
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npx prisma generate
+RUN npm run build
+
+FROM node:18-alpine AS runner
+WORKDIR /app
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/prisma ./prisma
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+```dockerfile
+# Dockerfile for Workers
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npx prisma generate
+CMD ["npm", "run", "workers"]
+```
+
+#### Option 2: PM2
+
+```javascript
+// ecosystem.config.js
+module.exports = {
+  apps: [
+    {
+      name: 'papermark-web',
+      script: 'npm',
+      args: 'start',
+      env: {
+        NODE_ENV: 'production',
+      },
+    },
+    {
+      name: 'papermark-workers',
+      script: 'npm',
+      args: 'run workers',
+      env: {
+        NODE_ENV: 'production',
+      },
+    },
+  ],
+};
+```
+
+### Managed Services Recommendations
+
+| Service | Options |
+|---------|---------|
+| PostgreSQL | AWS RDS, Supabase, Neon, Railway |
+| Redis | AWS ElastiCache, Upstash, Railway |
+| Storage | AWS S3, Cloudflare R2, MinIO |
+| Hosting | Vercel, Railway, Render, AWS ECS |
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### Workers not processing jobs
+
+```bash
+# Check Redis connection
+redis-cli ping
+
+# Check worker logs
+npm run workers:dev
+
+# Verify REDIS_URL is set correctly
+echo $REDIS_URL
+```
+
+#### Redis connection issues
+
+```bash
+# Test Redis directly
+redis-cli -u redis://localhost:6379 ping
+
+# Check if Redis container is running
+docker-compose ps redis
+
+# View Redis logs
+docker-compose logs redis
+
+# For Upstash, verify credentials
+curl -X POST "https://xxx.upstash.io" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '["PING"]'
+```
+
+#### Document conversion failing
+
+```bash
+# Check Gotenberg is running
+curl http://localhost:3001/health
+
+# Check logs
+docker-compose logs gotenberg
+```
+
+#### Database connection issues
+
+```bash
+# Test connection
+npx prisma db pull
+
+# Check PostgreSQL is running
+docker-compose ps postgres
+```
+
+### Health Checks
+
+```bash
+# App health
+curl http://localhost:3000/api/health
+
+# Redis
+redis-cli ping
+
+# PostgreSQL
+docker-compose exec postgres pg_isready
+
+# Gotenberg
+curl http://localhost:3001/health
+```
+
+### Logs
+
+```bash
+# All infrastructure logs
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f postgres
+docker-compose logs -f redis
+docker-compose logs -f gotenberg
+```
+
+---
+
+## Feature Availability
+
+| Feature | Self-Hosted | Notes |
+|---------|-------------|-------|
+| Document viewing | ✅ | Full support |
+| PDF conversion | ✅ | Via Gotenberg |
+| Office docs | ✅ | Via Gotenberg |
+| Video optimization | ✅ | Requires FFmpeg in workers |
+| Redis/caching | ✅ | Supports ioredis (REDIS_URL) or Upstash REST API |
+| Rate limiting | ✅ | Via Redis (graceful fallback if not configured) |
+| Slack notifications | ✅ | Requires Slack app setup |
+| Email notifications | ✅ | Optional (SMTP/Resend), graceful fallback |
+| Analytics | ✅ | Optional (Tinybird), graceful fallback |
+| Custom domains | ⚠️ | Requires Vercel or manual setup |
+
+### Graceful Fallbacks
+
+Papermark is designed for flexible deployment. Many services are optional:
+
+| Service | If Not Configured |
+|---------|-------------------|
+| Redis | Rate limiting disabled, uses in-memory locking for file uploads |
+| Email (SMTP/Resend) | Email features disabled, app continues working |
+| Tinybird | Analytics disabled, app continues working |
+| Slack | Slack integration unavailable |
+| Gotenberg | Office document conversion unavailable |
+
+---
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/mfts/papermark/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/mfts/papermark/discussions)

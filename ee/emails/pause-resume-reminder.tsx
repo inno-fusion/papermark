@@ -21,7 +21,7 @@ interface PauseResumeReminderEmailProps {
 }
 
 const baseUrl =
-  process.env.NEXT_PUBLIC_MARKETING_URL || "https://www.papermark.com";
+  process.env.NEXT_PUBLIC_MARKETING_URL || "https://0xmetalabs.com";
 
 export default function PauseResumeReminderEmail({
   teamName = "Your Team",
@@ -40,13 +40,9 @@ export default function PauseResumeReminderEmail({
         <Body className="mx-auto my-auto bg-white font-sans">
           <Container className="mx-auto my-[40px] w-[465px] rounded border border-solid border-[#eaeaea] p-[20px]">
             <Section className="mt-[32px]">
-              <Img
-                src={`${baseUrl}/_static/papermark-logo.png`}
-                width="160"
-                height="48"
-                alt="Papermark"
-                className="mx-auto my-0"
-              />
+              <Text className="mx-0 mb-8 mt-4 p-0 text-center text-2xl font-normal">
+                <span className="font-bold tracking-tighter">DocRoom</span>
+              </Text>
             </Section>
 
             <Heading className="mx-0 my-[30px] p-0 text-center text-[24px] font-normal text-black">
@@ -119,18 +115,18 @@ export default function PauseResumeReminderEmail({
             <Text className="text-[14px] leading-[24px] text-black">
               Best regards,
               <br />
-              The Papermark Team
+              The DocRoom Team
             </Text>
 
             <Section className="mt-[32px] border-t border-solid border-[#eaeaea] pt-[20px]">
               <Text className="text-[12px] leading-[16px] text-[#666]">
                 This email was sent to you as an admin/manager of the {teamName}{" "}
-                team on Papermark. If you believe this was sent in error, please
+                team on DocRoom. If you believe this was sent in error, please
                 contact our support team.
               </Text>
 
               <Text className="text-[12px] leading-[16px] text-[#666]">
-                Papermark - The secure document sharing platform
+                © {new Date().getFullYear()} 0xMetaLabs. All rights reserved.
               </Text>
             </Section>
           </Container>

@@ -391,9 +391,9 @@ export const convertThreadMessagesToMessages = (
 };
 
 export function constructMetadata({
-  title = "Papermark | The Open Source DocSend Alternative",
-  description = "Papermark is an open-source document sharing alternative to DocSend with built-in engagement analytics and 100% white-labeling.",
-  image = "https://www.papermark.com/_static/meta-image.png",
+  title = "DocRoom | Secure Document Sharing",
+  description = "DocRoom is a secure document sharing platform with built-in engagement analytics and 100% white-labeling.",
+  image = "/og-image.png",
   favicon = "/favicon.ico",
   noIndex = false,
 }: {
@@ -420,7 +420,7 @@ export function constructMetadata({
       title,
       description,
       images: [image],
-      creator: "@papermarkio",
+      creator: "@0xmetalabs",
     },
     favicon,
     ...(noIndex && {
@@ -519,6 +519,47 @@ export const uploadImage = async (
   file: File,
   uploadType: "profile" | "assets" = "assets",
 ) => {
+  // Check if using S3 transport (self-hosted mode)
+  const uploadTransport = process.env.NEXT_PUBLIC_UPLOAD_TRANSPORT;
+
+  if (uploadTransport === "s3") {
+    // S3 upload flow: get presigned URL and upload directly
+    const response = await fetch("/api/file/s3/asset-presigned-url", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        contentType: file.type,
+        uploadType,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to get upload URL");
+    }
+
+    const { uploadUrl, publicUrl } = await response.json();
+
+    // Upload file directly to S3 using presigned URL
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      body: file,
+      headers: {
+        "Content-Type": file.type,
+      },
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error("Failed to upload file to S3");
+    }
+
+    return publicUrl;
+  }
+
+  // Default: Vercel Blob upload flow
   const newBlob = await upload(file.name, file, {
     access: "public",
     handleUploadUrl: `/api/file/image-upload?type=${uploadType}`,

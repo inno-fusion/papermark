@@ -4,11 +4,13 @@ import { getServerSession } from "next-auth/next";
 
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
-import { convertFilesToPdfTask } from "@/lib/trigger/convert-files";
-import { convertPdfToImageRoute } from "@/lib/trigger/pdf-to-image-route";
+import {
+  addJobWithTags,
+  fileConversionQueue,
+  pdfToImageQueue,
+} from "@/lib/queues";
 import { CustomUser } from "@/lib/types";
 import { getExtension, log, serializeFileSize } from "@/lib/utils";
-import { conversionQueue } from "@/lib/utils/trigger-utils";
 import { documentUploadSchema } from "@/lib/zod/url-validation";
 
 import { authOptions } from "../../../auth/[...nextauth]";
@@ -131,42 +133,42 @@ export default async function handle(
       });
 
       if (type === "docs") {
-        await convertFilesToPdfTask.trigger(
+        await addJobWithTags(
+          fileConversionQueue,
+          "files-to-pdf",
           {
             documentId: document.id,
             documentVersionId: document.versions[0].id,
             teamId,
+            conversionType: "office" as const,
           },
           {
-            idempotencyKey: `${teamId}-${document.versions[0].id}-docs`,
+            jobId: `${teamId}-${document.versions[0].id}-docs`,
             tags: [
               `team_${teamId}`,
               `document_${document.id}`,
               `version:${document.versions[0].id}`,
             ],
-            queue: conversionQueue(team.plan),
-            concurrencyKey: teamId,
           },
         );
       }
 
       if (type === "pdf") {
-        await convertPdfToImageRoute.trigger(
+        await addJobWithTags(
+          pdfToImageQueue,
+          "pdf-to-image",
           {
             documentId: document.id,
             documentVersionId: document.versions[0].id,
             teamId,
-            // docId: fileUrl.split("/")[1],
           },
           {
-            idempotencyKey: `${teamId}-${document.versions[0].id}`,
+            jobId: `pdf-${document.versions[0].id}`,
             tags: [
               `team_${teamId}`,
               `document_${document.id}`,
               `version:${document.versions[0].id}`,
             ],
-            queue: conversionQueue(team.plan),
-            concurrencyKey: teamId,
           },
         );
       }

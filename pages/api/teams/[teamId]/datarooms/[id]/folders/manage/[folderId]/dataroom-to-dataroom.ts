@@ -4,6 +4,7 @@ import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import slugify from "@sindresorhus/slugify";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
 import { CustomUser } from "@/lib/types";
@@ -134,13 +135,16 @@ export default async function handle(
         return res.status(401).end("Unauthorized");
       }
 
-      if (
-        (team.plan === "free" || team.plan === "pro") &&
-        !team.plan.includes("drtrial")
-      ) {
-        return res.status(403).json({
-          message: "Upgrade your plan to use datarooms.",
-        });
+      // Skip plan check in self-hosted mode
+      if (!isSelfHosted()) {
+        if (
+          (team.plan === "free" || team.plan === "pro") &&
+          !team.plan.includes("drtrial")
+        ) {
+          return res.status(403).json({
+            message: "Upgrade your plan to use datarooms.",
+          });
+        }
       }
 
       try {
