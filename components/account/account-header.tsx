@@ -19,11 +19,6 @@ export function AccountHeader() {
             href: `/account/general`,
             segment: `general`,
           },
-          {
-            label: "Security",
-            href: `/account/security`,
-            segment: "security",
-          },
         ]}
       />
     </header>

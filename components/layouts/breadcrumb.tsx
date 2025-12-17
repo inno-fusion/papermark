@@ -277,8 +277,6 @@ const AccountBreadcrumb = () => {
     switch (path) {
       case "/account/general":
         return "General";
-      case "/account/security":
-        return "Security";
       default:
         return "Account";
     }
