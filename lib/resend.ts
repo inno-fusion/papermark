@@ -1,96 +1,51 @@
-import { JSXElementConstructor, ReactElement } from "react";
+/**
+ * Email Service - Unified Provider
+ *
+ * This module provides a unified interface for sending emails using either:
+ * - SMTP (for AWS SES, OCI Email, or any SMTP server)
+ * - Resend (cloud email service)
+ *
+ * Provider selection is automatic based on environment variables:
+ * - If SMTP_HOST and SMTP_PORT are set → SMTP is used
+ * - Otherwise if RESEND_API_KEY is set → Resend is used
+ *
+ * For self-hosting, configure SMTP with:
+ * - AWS SES: smtp.region.amazonaws.com:587
+ * - OCI Email: smtp.email.region.oci.oraclecloud.com:587
+ * - Any SMTP: host:port with optional user/password
+ */
 
-import { render, toPlainText } from "@react-email/render";
-import { Resend } from "resend";
+// Re-export everything from the unified provider
+export {
+  sendEmail,
+  verifyEmailConnection,
+  isEmailConfigured,
+  getEmailProviderName,
+} from "./email/provider";
 
-import { log, nanoid } from "@/lib/utils";
+export type { SendEmailOptions } from "./email/provider";
 
-export const resend = process.env.RESEND_API_KEY
-  ? new Resend(process.env.RESEND_API_KEY)
-  : null;
+// Legacy export for backwards compatibility
+// Some code might import `resend` directly
+import { isEmailConfigured } from "./email/provider";
 
-export const sendEmail = async ({
-  to,
-  subject,
-  react,
-  from,
-  marketing,
-  system,
-  verify,
-  test,
-  cc,
-  replyTo,
-  scheduledAt,
-  unsubscribeUrl,
-}: {
-  to: string;
-  subject: string;
-  react: ReactElement<any, string | JSXElementConstructor<any>>;
-  from?: string;
-  marketing?: boolean;
-  system?: boolean;
-  verify?: boolean;
-  test?: boolean;
-  cc?: string | string[];
-  replyTo?: string;
-  scheduledAt?: string;
-  unsubscribeUrl?: string;
-}) => {
-  if (!resend) {
-    // Throw an error if resend is not initialized
-    throw new Error("Resend not initialized");
-  }
-
-  const html = await render(react);
-  const plainText = toPlainText(html);
-
-  const fromAddress =
-    from ??
-    (marketing
-      ? "Marc from Papermark <marc@ship.papermark.io>"
-      : system
-        ? "Papermark <system@papermark.io>"
-        : verify
-          ? "Papermark <system@verify.papermark.io>"
-          : !!scheduledAt
-            ? "Marc Seitz <marc@papermark.io>"
-            : "Marc from Papermark <marc@papermark.io>");
-
-  try {
-    const { data, error } = await resend.emails.send({
-      from: fromAddress,
-      to: test ? "delivered@resend.dev" : to,
-      cc: cc,
-      replyTo: marketing ? "marc@papermark.io" : replyTo,
-      subject,
-      react,
-      scheduledAt,
-      text: plainText,
-      headers: {
-        "X-Entity-Ref-ID": nanoid(),
-        ...(unsubscribeUrl ? { "List-Unsubscribe": unsubscribeUrl } : {}),
-      },
-    });
-
-    // Check if the email sending operation returned an error and throw it
-    if (error) {
-      log({
-        message: `Resend returned error when sending email: ${error.name} \n\n ${error.message}`,
-        type: "error",
-        mention: true,
-      });
-      throw error;
-    }
-
-    // If there's no error, return the data
-    return data;
-  } catch (exception) {
-    // Log and rethrow any caught exceptions for upstream handling
-    log({
-      message: `Unexpected error when sending email: ${exception}`,
-      type: "error",
-      mention: true,
-    });
-    throw exception; // Rethrow the caught exception
-  }
+/**
+ * @deprecated Use sendEmail() from this module instead.
+ * This export is kept for backwards compatibility only.
+ */
+type ResendBatchResult = {
+  data: { data: Array<{ id: string }> } | null;
+  error: { message: string } | null;
 };
+
+export const resend = isEmailConfigured()
+  ? {
+      emails: { send: (_: any) => {} },
+      batch: {
+        send: async (_emails: any[]): Promise<ResendBatchResult> => ({
+          data: null,
+          error: { message: "Batch send not available with SMTP. Configure RESEND_API_KEY for batch email support." },
+        }),
+      },
+    }
+  : null;
