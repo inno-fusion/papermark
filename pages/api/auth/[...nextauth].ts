@@ -1,8 +1,7 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
-import { checkRateLimit, rateLimiters } from "@/ee/features/security";
+import { checkRateLimit } from "@/ee/features/security";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import PasskeyProvider from "@teamhanko/passkeys-next-auth-provider";
 import NextAuth, { type NextAuthOptions } from "next-auth";
 import EmailProvider from "next-auth/providers/email";
 import GoogleProvider from "next-auth/providers/google";
@@ -13,7 +12,6 @@ import { dub } from "@/lib/dub";
 import { isBlacklistedEmail } from "@/lib/edge-config/blacklist";
 import { sendVerificationRequestEmail } from "@/lib/emails/send-verification-request";
 import { sendWelcomeEmail } from "@/lib/emails/send-welcome";
-import hanko from "@/lib/hanko";
 import prisma from "@/lib/prisma";
 import { CreateUserEmailProps, CustomUser } from "@/lib/types";
 import { subscribe } from "@/lib/unsend";
@@ -22,6 +20,12 @@ import { generateChecksum } from "@/lib/utils/generate-checksum";
 import { getIpAddress } from "@/lib/utils/ip";
 
 const VERCEL_DEPLOYMENT = !!process.env.VERCEL_URL;
+
+// Detect if we're running in a secure context (Vercel OR HTTPS self-hosted)
+const NEXTAUTH_URL = process.env.NEXTAUTH_URL || "";
+const IS_HTTPS = NEXTAUTH_URL.startsWith("https://");
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const USE_SECURE_COOKIES = VERCEL_DEPLOYMENT || (IS_PRODUCTION && IS_HTTPS);
 
 function getMainDomainUrl(): string {
   if (process.env.NODE_ENV === "development") {
@@ -103,27 +107,19 @@ export const authOptions: NextAuthOptions = {
         }
       },
     }),
-    PasskeyProvider({
-      tenant: hanko,
-      async authorize({ userId }) {
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) return null;
-        return user;
-      },
-    }),
   ],
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   cookies: {
     sessionToken: {
-      name: `${VERCEL_DEPLOYMENT ? "__Secure-" : ""}next-auth.session-token`,
+      name: `${USE_SECURE_COOKIES ? "__Secure-" : ""}next-auth.session-token`,
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        // When working on localhost, the cookie domain must be omitted entirely (https://stackoverflow.com/a/1188145)
+        // For Vercel, use .papermark.com; for self-hosted, don't set domain (use request domain)
         domain: VERCEL_DEPLOYMENT ? ".papermark.com" : undefined,
-        secure: VERCEL_DEPLOYMENT,
+        secure: USE_SECURE_COOKIES,
       },
     },
   },
@@ -209,12 +205,32 @@ const getAuthOptions = (req: NextApiRequest): NextAuthOptions => {
           return false;
         }
 
+        // Block new user signups if disabled
+        const isSignupDisabled =
+          process.env.NEXT_PUBLIC_DISABLE_SIGNUP === "true" ||
+          process.env.NEXT_PUBLIC_DISABLE_SIGNUP === "1";
+
+        if (isSignupDisabled && user.email) {
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email },
+            select: { id: true },
+          });
+
+          if (!existingUser) {
+            log({
+              message: `Signup blocked for ${user.email} - signups are disabled`,
+              type: "info",
+            });
+            return false;
+          }
+        }
+
         // Apply rate limiting for signin attempts
         try {
           if (req) {
             const clientIP = getIpAddress(req.headers);
             const rateLimitResult = await checkRateLimit(
-              rateLimiters.auth,
+              "auth",
               clientIP,
             );
 

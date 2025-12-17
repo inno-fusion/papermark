@@ -145,6 +145,12 @@ model View {
 
   uploadedDocuments DocumentUpload[] // uploaded documents by this view
 
+  // Analytics (replaces Tinybird)
+  pageViews       PageView[]
+  videoViews      VideoView[]
+  clickEvents     ClickEvent[]
+  linkClickEvents LinkClickEvent[]
+
   teamId String?
   team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
@@ -378,6 +384,9 @@ model Webhook {
 
   teamId String
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // Analytics (replaces Tinybird)
+  webhookEvents WebhookEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

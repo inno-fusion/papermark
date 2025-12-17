@@ -1,0 +1,75 @@
+# =============================================================================
+# DocRoom Docker Ignore
+# Files and directories to exclude from Docker build context
+# =============================================================================
+
+# Dependencies (rebuilt in Docker)
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs (rebuilt in Docker)
+.next
+out
+build
+dist
+
+# Testing
+coverage
+.nyc_output
+
+# Environment files (secrets!)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Documentation
+*.md
+!README.md
+docs
+
+# Docker (don't include Docker files in build context recursively)
+docker-compose*.yml
+Dockerfile*
+
+# Development files
+.eslintcache
+.prettierrc
+tsconfig.tsbuildinfo
+
+# Prisma migrations backup
+prisma/migrations/.backup
+
+# Vercel
+.vercel
+
+# Testing and CI
+.github
+.husky
+
+# Strategy doc (not needed in image)
+docker-strategy.md
+
+# Docker data volumes (bind mounts - can be huge!)
+data/

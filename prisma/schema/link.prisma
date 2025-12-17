@@ -89,6 +89,12 @@ model Link {
   tags TagItem[]
   viewerInvitations ViewerInvitation[]
 
+  // Analytics (replaces Tinybird)
+  pageViews       PageView[]
+  videoViews      VideoView[]
+  clickEvents     ClickEvent[]
+  linkClickEvents LinkClickEvent[]
+
   // workflow entry link
   workflow Workflow?
 
