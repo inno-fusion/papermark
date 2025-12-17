@@ -5,11 +5,11 @@ import { View } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { LIMITS } from "@/lib/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
-import { getViewPageDuration } from "@/lib/tinybird";
-import { getVideoEventsByDocument } from "@/lib/tinybird/pipes";
+import { getViewPageDuration, getVideoEventsByDocument } from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
 
@@ -306,9 +306,9 @@ export default async function handle(
         },
       });
 
-      // filter the last 20 views
+      // filter the last 20 views (skip in self-hosted mode)
       const limitedViews =
-        team.plan === "free" && offset >= LIMITS.views ? [] : views;
+        !isSelfHosted() && team.plan === "free" && offset >= LIMITS.views ? [] : views;
 
       let viewsWithDuration;
       if (document.type === "video") {

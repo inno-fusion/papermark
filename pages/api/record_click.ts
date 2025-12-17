@@ -3,7 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
 
 import { newId } from "@/lib/id-helper";
-import { recordClickEvent } from "@/lib/tinybird";
+import { recordClickEvent } from "@/lib/analytics";
 import { log } from "@/lib/utils";
 
 const bodyValidation = z.object({

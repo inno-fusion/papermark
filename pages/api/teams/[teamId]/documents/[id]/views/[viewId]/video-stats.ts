@@ -4,7 +4,7 @@ import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth/next";
 
 import prisma from "@/lib/prisma";
-import { getVideoEventsByView } from "@/lib/tinybird/pipes";
+import { getVideoEventsByView } from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 
 export default async function handler(

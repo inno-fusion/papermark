@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { EU_COUNTRY_CODES, VIDEO_EVENT_TYPES } from "@/lib/constants";
 import { newId } from "@/lib/id-helper";
-import { recordVideoView } from "@/lib/tinybird";
+import { recordVideoView } from "@/lib/analytics";
 import { Geo } from "@/lib/types";
 import { capitalize, getDomainWithoutWWW, log } from "@/lib/utils";
 import { LOCALHOST_GEO_DATA, getGeoData } from "@/lib/utils/geo";

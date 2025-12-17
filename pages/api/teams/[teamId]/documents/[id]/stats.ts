@@ -10,8 +10,8 @@ import {
   getTotalAvgPageDuration,
   getTotalDocumentDuration,
   getViewPageDuration,
-} from "@/lib/tinybird";
-import { getVideoEventsByDocument } from "@/lib/tinybird/pipes";
+  getVideoEventsByDocument,
+} from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 
 export default async function handle(
@@ -212,12 +212,17 @@ export default async function handle(
         }
       }
 
+      // Safely get total duration - handle case when Tinybird returns empty data
+      const totalDurationSum = totalDocumentDuration.data[0]?.sum_duration ?? 0;
+      const totalDuration =
+        filteredViews.length > 0
+          ? (totalDurationSum * 1.0) / filteredViews.length
+          : 0;
+
       const stats = {
         views: filteredViews,
         duration,
-        total_duration:
-          (totalDocumentDuration.data[0].sum_duration * 1.0) /
-          filteredViews.length,
+        total_duration: totalDuration,
         avgCompletionRate: Math.round(avgCompletionRate),
         totalViews: filteredViews.length,
       };

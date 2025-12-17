@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { getLimits } from "@/ee/limits/server";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { Prisma } from "@prisma/client";
@@ -127,9 +128,9 @@ export default async function handle(
     const hasLinks = document._count.links > 0;
     const hasViews = document._count.views > 0;
 
-    // Check for page links only if needed
+    // Check for page links only if needed (skip in self-hosted mode)
     let hasPageLinks = false;
-    if (primaryVersion && team.plan.includes("free")) {
+    if (primaryVersion && !isSelfHosted() && team.plan.includes("free")) {
       const pageLinksCount = await prisma.documentPage.count({
         where: {
           versionId: primaryVersion.id,
