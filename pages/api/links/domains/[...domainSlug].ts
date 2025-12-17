@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 
 import { Brand, DataroomBrand, LinkAudienceType } from "@prisma/client";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { fetchDataroomDocumentLinkData } from "@/lib/api/links/link-data";
 import {
   fetchDataroomLinkData,
@@ -143,8 +144,8 @@ export default async function handle(
 
       const teamPlan = link.team?.plan || "free";
       const teamId = link.teamId;
-      // if owner of document is on free plan, return 404
-      if (teamPlan.includes("free")) {
+      // if owner of document is on free plan, return 404 (skip in self-hosted mode)
+      if (!isSelfHosted() && teamPlan.includes("free")) {
         log({
           message: `Link is from a free team _${teamId}_ for custom domain _${domain}/${slug}_`,
           type: "info",
@@ -230,12 +231,14 @@ export default async function handle(
         team: undefined,
         document: undefined,
         dataroom: undefined,
-        ...(teamPlan === "free" && {
-          customFields: [], // reset custom fields for free plan
-          enableAgreement: false,
-          enableWatermark: false,
-          permissionGroupId: null,
-        }),
+        // Skip feature restrictions in self-hosted mode
+        ...(!isSelfHosted() &&
+          teamPlan === "free" && {
+            customFields: [], // reset custom fields for free plan
+            enableAgreement: false,
+            enableWatermark: false,
+            permissionGroupId: null,
+          }),
       };
 
       // clean up the link return object

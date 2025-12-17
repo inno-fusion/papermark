@@ -46,6 +46,11 @@ export async function addEmailToStripeRadar(email: string): Promise<boolean> {
  * Add email to Vercel Edge Config blocklist
  */
 export async function addEmailToEdgeConfig(email: string): Promise<boolean> {
+  // Skip if Edge Config not configured
+  if (!process.env.EDGE_CONFIG) {
+    return false;
+  }
+
   try {
     // 1. Read current emails from Edge Config
     const currentEmails = (await get("emails")) || [];

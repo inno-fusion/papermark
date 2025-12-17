@@ -66,19 +66,27 @@ const fetchPresignedUrl = async (
 };
 
 const getFileFromS3 = async (key: string) => {
-  const isServer =
-    typeof window === "undefined" && !!process.env.INTERNAL_API_KEY;
+  const isServer = typeof window === "undefined";
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTAUTH_URL;
 
-  if (isServer) {
+  // Server-side (workers, API routes): use absolute URL with internal API key
+  if (isServer && baseUrl) {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    // Add auth header if internal API key is available
+    if (process.env.INTERNAL_API_KEY) {
+      headers.Authorization = `Bearer ${process.env.INTERNAL_API_KEY}`;
+    }
+
     return fetchPresignedUrl(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/api/file/s3/get-presigned-get-url`,
-      {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.INTERNAL_API_KEY}`,
-      },
+      `${baseUrl}/api/file/s3/get-presigned-get-url`,
+      headers,
       key,
     );
   } else {
+    // Client-side: use relative URL (proxy endpoint)
     return fetchPresignedUrl(
       `/api/file/s3/get-presigned-get-url-proxy`,
       {

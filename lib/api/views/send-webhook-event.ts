@@ -1,3 +1,5 @@
+import { isSelfHosted } from "@/ee/limits/constants";
+import { DEFAULT_LINK_DOMAIN } from "@/lib/constants";
 import prisma from "@/lib/prisma";
 import { log } from "@/lib/utils";
 import { sendWebhooks } from "@/lib/webhook/send-webhooks";
@@ -21,19 +23,22 @@ export async function sendLinkViewWebhook({
       throw new Error("Missing required parameters");
     }
 
-    // check if team is on paid plan
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
-      select: { plan: true },
-    });
+    // Skip plan check in self-hosted mode
+    if (!isSelfHosted()) {
+      // check if team is on paid plan
+      const team = await prisma.team.findUnique({
+        where: { id: teamId },
+        select: { plan: true },
+      });
 
-    if (
-      team?.plan === "free" ||
-      team?.plan === "pro" ||
-      team?.plan.includes("trial")
-    ) {
-      // team is not on paid plan, so we don't need to send webhooks
-      return;
+      if (
+        team?.plan === "free" ||
+        team?.plan === "pro" ||
+        team?.plan.includes("trial")
+      ) {
+        // team is not on paid plan, so we don't need to send webhooks
+        return;
+      }
     }
 
     // Get webhooks for team
@@ -70,9 +75,9 @@ export async function sendLinkViewWebhook({
       id: link.id,
       url: link.domainId
         ? `https://${link.domainSlug}/${link.slug}`
-        : `https://www.papermark.com/view/${link.id}`,
+        : `https://www.${DEFAULT_LINK_DOMAIN}/view/${link.id}`,
       domain:
-        link.domainId && link.domainSlug ? link.domainSlug : "papermark.com",
+        link.domainId && link.domainSlug ? link.domainSlug : DEFAULT_LINK_DOMAIN,
       key: link.domainId && link.slug ? link.slug : `view/${link.id}`,
       name: link.name,
       expiresAt: link.expiresAt?.toISOString() || null,

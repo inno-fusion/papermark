@@ -27,46 +27,46 @@ export default function App({
   return (
     <>
       <Head>
-        <title>Papermark | The Open Source DocSend Alternative</title>
+        <title>DocRoom by 0xMetaLabs</title>
         <meta name="theme-color" content="#000000" />
         <meta
           name="description"
-          content="Papermark is an open-source document sharing alternative to DocSend with built-in analytics."
+          content="DocRoom - Secure document sharing with built-in analytics by 0xMetaLabs."
           key="description"
         />
         <meta
           property="og:title"
-          content="Papermark | The Open Source DocSend Alternative"
+          content="DocRoom by 0xMetaLabs"
           key="og-title"
         />
         <meta
           property="og:description"
-          content="Papermark is an open-source document sharing alternative to DocSend with built-in analytics."
+          content="DocRoom - Secure document sharing with built-in analytics by 0xMetaLabs."
           key="og-description"
         />
         <meta
           property="og:image"
-          content="https://www.papermark.com/_static/meta-image.png"
+          content="https://0xmetalabs.com/_static/meta-image.png"
           key="og-image"
         />
         <meta
           property="og:url"
-          content="https://www.papermark.com"
+          content="https://0xmetalabs.com"
           key="og-url"
         />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:site" content="@papermarkio" />
-        <meta name="twitter:creator" content="@papermarkio" />
-        <meta name="twitter:title" content="Papermark" key="tw-title" />
+        <meta name="twitter:site" content="@0xmetalabs" />
+        <meta name="twitter:creator" content="@0xmetalabs" />
+        <meta name="twitter:title" content="DocRoom by 0xMetaLabs" key="tw-title" />
         <meta
           name="twitter:description"
-          content="Papermark is an open-source document sharing alternative to DocSend with built-in analytics."
+          content="DocRoom - Secure document sharing with built-in analytics by 0xMetaLabs."
           key="tw-description"
         />
         <meta
           name="twitter:image"
-          content="https://www.papermark.com/_static/meta-image.png"
+          content="https://0xmetalabs.com/_static/meta-image.png"
           key="tw-image"
         />
         <link rel="icon" href="/favicon.ico" key="favicon" />

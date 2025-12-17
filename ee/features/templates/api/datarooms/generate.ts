@@ -5,6 +5,7 @@ import {
   FolderTemplate,
 } from "@/ee/features/templates/constants/dataroom-templates";
 import { generateDataroomSchema } from "@/ee/features/templates/schemas/dataroom-templates";
+import { isSelfHosted } from "@/ee/limits/constants";
 import { getLimits } from "@/ee/limits/server";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import slugify from "@sindresorhus/slugify";
@@ -44,23 +45,28 @@ export default async function handle(
 
     try {
       // Check if the user is part of the team
+      // In self-hosted mode, allow any plan to create datarooms
       const team = await prisma.team.findUnique({
         where: {
           id: teamId,
-          plan: {
-            // exclude all teams not on `business`, `datarooms`, `datarooms-plus`, `business+old`, `datarooms+old`, `datarooms-plus+old` plan
-            in: [
-              "business",
-              "datarooms",
-              "datarooms-plus",
-              "business+old",
-              "datarooms+old",
-              "datarooms-plus+old",
-              "datarooms+drtrial",
-              "business+drtrial",
-              "datarooms-plus+drtrial",
-            ],
-          },
+          ...(isSelfHosted()
+            ? {}
+            : {
+                plan: {
+                  // exclude all teams not on `business`, `datarooms`, `datarooms-plus`, `business+old`, `datarooms+old`, `datarooms-plus+old` plan
+                  in: [
+                    "business",
+                    "datarooms",
+                    "datarooms-plus",
+                    "business+old",
+                    "datarooms+old",
+                    "datarooms-plus+old",
+                    "datarooms+drtrial",
+                    "business+drtrial",
+                    "datarooms-plus+drtrial",
+                  ],
+                },
+              }),
           users: {
             some: {
               userId: userId,

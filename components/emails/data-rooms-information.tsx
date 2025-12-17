@@ -15,7 +15,7 @@ import {
 import { Footer } from "./shared/footer";
 
 const DataRoomsInformationEmail = () => {
-  const previewText = `The document sharing infrastructure for the modern web`;
+  const previewText = `Secure document sharing with built-in analytics`;
 
   return (
     <Html>
@@ -25,14 +25,14 @@ const DataRoomsInformationEmail = () => {
         <Body className="mx-auto my-auto bg-white font-sans">
           <Container className="mx-auto my-10 w-[465px] p-5">
             <Text className="mx-0 mb-8 mt-4 p-0 text-center text-2xl font-normal">
-              <span className="font-bold tracking-tighter">Papermark</span>
+              <span className="font-bold tracking-tighter">DocRoom</span>
             </Text>
             <Text className="mx-0 mb-8 mt-4 p-0 text-center text-2xl font-normal">
               Virtual Data Rooms
             </Text>
             <Text className="text-sm">Unlimited branded data rooms!</Text>
             <Text className="text-sm">
-              With Papermark Data Rooms plan you can:
+              With DocRoom Data Rooms you can:
             </Text>
             <ul className="list-inside list-disc text-sm">
               <li>Share data rooms with one link</li>
@@ -44,38 +44,21 @@ const DataRoomsInformationEmail = () => {
               <li>Create fully branded experience </li>
               <li>Use advanced link settings</li>
             </ul>
-            <Text className="text-sm">
-              All about Papermark{" "}
-              <a
-                href="https://www.papermark.com/data-room"
-                className="text-blue-500 underline"
-              >
-                Data Rooms
-              </a>{" "}
-              features and plans
-            </Text>
             <Section className="my-8 text-center">
               <Button
                 className="rounded bg-black text-center text-xs font-semibold text-white no-underline"
-                href={`https://app.papermark.com/datarooms?utm_source=dataroom-info&utm_medium=email&utm_campaign=20240723&utm_content=upload_documents`}
+                href={`${process.env.NEXT_PUBLIC_BASE_URL}/datarooms`}
                 style={{ padding: "12px 20px" }}
               >
                 Create new data room
               </Button>
             </Section>
             <Text className="text-sm">
-              If you require a fully customizable experience,{" "}
-              <a
-                href="https://cal.com/marcseitz/papermark"
-                className="text-blue-500 underline"
-              >
-                book a call
-              </a>{" "}
-              with us.
+              If you have any questions, just reply to this email.
             </Text>
             <Footer
               withAddress={false}
-              footerText="This is a last onboarding email. If you have any feedback or questions about this email, simply reply to it. I'd love to hear from you!"
+              footerText="This is the last onboarding email. If you have any feedback or questions, simply reply to it."
             />
           </Container>
         </Body>

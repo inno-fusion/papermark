@@ -45,12 +45,12 @@ export default function CustomDomainSetup({
   return (
     <Html>
       <Head />
-      <Preview>Your Papermark custom domain set up</Preview>
+      <Preview>Your DocRoom custom domain set up</Preview>
       <Tailwind>
         <Body className="mx-auto my-auto bg-white font-sans">
           <Container className="mx-auto my-10 w-[465px] p-5">
             <Text className="mx-0 mb-8 mt-4 p-0 text-center text-2xl font-normal">
-              <span className="font-bold tracking-tighter">Papermark</span>
+              <span className="font-bold tracking-tighter">DocRoom</span>
             </Text>
             <Text className="mx-0 my-7 p-0 text-center text-xl font-semibold text-black">
               {title}
@@ -83,8 +83,8 @@ export default function CustomDomainSetup({
             </Text>
             <ol className="list-inside list-decimal text-sm">
               <li>Choose your subdomain (e.g. docs.yourcompany.com)</li>
-              <li>Add a CNAME record pointing to papermark.com</li>
-              <li>Configure the domain in your Papermark settings</li>
+              <li>Add a CNAME record pointing to your DocRoom instance</li>
+              <li>Configure the domain in your DocRoom settings</li>
               <li>Start sharing with your branded domain!</li>
             </ol>
 
@@ -92,7 +92,7 @@ export default function CustomDomainSetup({
               {hasAccess ? (
                 <Button
                   className="rounded bg-black text-center text-xs font-semibold text-white no-underline"
-                  href={`https://app.papermark.com/settings/domains`}
+                  href={`${process.env.NEXT_PUBLIC_BASE_URL}/settings/domains`}
                   style={{ padding: "12px 20px" }}
                 >
                   Set up your custom domain
@@ -100,7 +100,7 @@ export default function CustomDomainSetup({
               ) : (
                 <Button
                   className="rounded bg-black text-center text-xs font-semibold text-white no-underline"
-                  href={`https://app.papermark.com/settings/upgrade`}
+                  href={`${process.env.NEXT_PUBLIC_BASE_URL}/settings/upgrade`}
                   style={{ padding: "12px 20px" }}
                 >
                   Upgrade to use custom domains
@@ -111,20 +111,14 @@ export default function CustomDomainSetup({
             <Text className="text-sm leading-6 text-black">
               {hasAccess ? (
                 <>
-                  Need help? Check out our{" "}
-                  <Link
-                    href="https://docs.papermark.com/custom-domains"
-                    className="font-medium text-blue-600 no-underline"
-                  >
-                    custom domain documentation
-                  </Link>{" "}
-                  or reply to this email - we&apos;re here to help!
+                  Need help setting up your custom domain? Reply to this email -
+                  we&apos;re here to help!
                 </>
               ) : (
                 <>
                   Want to learn more about our plans?{" "}
                   <Link
-                    href="https://app.papermark.com/settings/upgrade"
+                    href={`${process.env.NEXT_PUBLIC_BASE_URL}/settings/upgrade`}
                     className="font-medium text-blue-600 no-underline"
                   >
                     View pricing

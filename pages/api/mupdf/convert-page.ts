@@ -145,8 +145,8 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
       return { href: link.getURI(), coords: link.getBounds().join(",") };
     });
 
-    // Check embedded links for blocked keywords
-    if (embeddedLinks.length > 0) {
+    // Check embedded links for blocked keywords (only if Edge Config is available)
+    if (embeddedLinks.length > 0 && process.env.EDGE_CONFIG) {
       try {
         const keywords = await get("keywords");
         if (Array.isArray(keywords) && keywords.length > 0) {

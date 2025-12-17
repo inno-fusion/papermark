@@ -4,7 +4,7 @@ import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth/next";
 
 import prisma from "@/lib/prisma";
-import { getVideoEventsByDocument } from "@/lib/tinybird/pipes";
+import { getVideoEventsByDocument } from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 
 interface AnalyticsResponse {

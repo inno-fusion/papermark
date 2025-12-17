@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
 import { CustomUser } from "@/lib/types";
@@ -50,8 +51,8 @@ export default async function handle(
         return res.status(401).end("Unauthorized");
       }
 
-      // Check if team is on free plan
-      if (teamAccess.team.plan === "free") {
+      // Check if team is on free plan (skip in self-hosted mode)
+      if (!isSelfHosted() && teamAccess.team.plan === "free") {
         return res.status(403).json({
           error:
             "Link deletion is not available on the free plan. Please upgrade to delete links.",

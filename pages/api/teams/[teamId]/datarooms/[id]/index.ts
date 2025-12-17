@@ -4,6 +4,7 @@ import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { DefaultPermissionStrategy } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import { getFeatureFlags } from "@/lib/featureFlags";
 import prisma from "@/lib/prisma";
@@ -132,15 +133,18 @@ export default async function handle(
       const isDataroomsPlus = team.plan.includes("datarooms-plus");
       const isTrial = team.plan.includes("drtrial");
 
-      if (
-        enableChangeNotifications !== undefined &&
-        !isDataroomsPlus &&
-        !isTrial &&
-        !featureFlags.roomChangeNotifications
-      ) {
-        return res.status(403).json({
-          message: "This feature is not available in your plan",
-        });
+      // Skip plan check in self-hosted mode
+      if (!isSelfHosted()) {
+        if (
+          enableChangeNotifications !== undefined &&
+          !isDataroomsPlus &&
+          !isTrial &&
+          !featureFlags.roomChangeNotifications
+        ) {
+          return res.status(403).json({
+            message: "This feature is not available in your plan",
+          });
+        }
       }
 
       const updatedDataroom = await prisma.$transaction(async (tx) => {

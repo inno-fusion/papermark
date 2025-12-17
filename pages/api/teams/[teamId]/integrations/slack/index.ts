@@ -69,6 +69,9 @@ async function handleGet(
   teamId: string,
 ) {
   const env = getSlackEnv();
+  if (!env) {
+    return res.status(503).json({ error: "Slack integration not configured" });
+  }
 
   try {
     const integrationFullData = await prisma.installedIntegration.findUnique({
@@ -112,6 +115,9 @@ async function handleUpdate(
   teamId: string,
 ) {
   const env = getSlackEnv();
+  if (!env) {
+    return res.status(503).json({ error: "Slack integration not configured" });
+  }
   try {
     const validationResult = slackIntegrationUpdateSchema.safeParse(req.body);
 
@@ -188,6 +194,9 @@ async function handleDelete(
   teamId: string,
 ) {
   const env = getSlackEnv();
+  if (!env) {
+    return res.status(503).json({ error: "Slack integration not configured" });
+  }
   try {
     const integration = await prisma.installedIntegration.findUnique({
       where: {

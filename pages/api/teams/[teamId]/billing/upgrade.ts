@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
-import { checkRateLimit, rateLimiters } from "@/ee/features/security";
+import { checkRateLimit } from "@/ee/features/security";
 import { stripeInstance } from "@/ee/stripe";
 import { getPlanFromPriceId, isOldAccount } from "@/ee/stripe/utils";
 import { waitUntil } from "@vercel/functions";
@@ -27,7 +27,7 @@ export default async function handle(
     // Apply rate limiting
     const clientIP = getIpAddress(req.headers);
     const rateLimitResult = await checkRateLimit(
-      rateLimiters.billing,
+      "billing",
       clientIP,
     );
 

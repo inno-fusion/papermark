@@ -7,6 +7,7 @@ import { ItemType, LinkAudienceType } from "@prisma/client";
 import { ipAddress, waitUntil } from "@vercel/functions";
 import { getServerSession } from "next-auth";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { hashToken } from "@/lib/api/auth/token";
 import {
   DataroomSession,
@@ -834,8 +835,8 @@ export async function POST(request: NextRequest) {
             file: true,
             storageType: true,
             pageNumber: true,
-            embeddedLinks: !link.team?.plan.includes("free"),
-            pageLinks: !link.team?.plan.includes("free"),
+            embeddedLinks: isSelfHosted() || !link.team?.plan.includes("free"),
+            pageLinks: isSelfHosted() || !link.team?.plan.includes("free"),
             metadata: true,
           },
         });

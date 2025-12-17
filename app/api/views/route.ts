@@ -7,6 +7,7 @@ import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { ipAddress, waitUntil } from "@vercel/functions";
 import { getServerSession } from "next-auth";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { hashToken } from "@/lib/api/auth/token";
 import { verifyPreviewSession } from "@/lib/auth/preview-auth";
 import { PreviewSession } from "@/lib/auth/preview-auth";
@@ -551,7 +552,7 @@ export async function POST(request: NextRequest) {
           teamId: link.teamId!,
         });
         const inDocumentLinks =
-          !link.team?.plan.includes("free") || featureFlags.inDocumentLinks;
+          isSelfHosted() || !link.team?.plan.includes("free") || featureFlags.inDocumentLinks;
 
         // get pages from document version
         console.time("get-pages");

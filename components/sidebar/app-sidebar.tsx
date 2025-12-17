@@ -235,32 +235,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       {...props}
     >
       <SidebarHeader className="gap-y-8">
-        <p className="hidden w-full justify-center text-2xl font-bold tracking-tighter text-black group-data-[collapsible=icon]:inline-flex dark:text-white">
-          <Link href="/dashboard">P</Link>
-        </p>
-        <p className="ml-2 flex items-center text-2xl font-bold tracking-tighter text-black group-data-[collapsible=icon]:hidden dark:text-white">
-          <Link href="/dashboard">Papermark</Link>
-          {userPlan && !isFree && !isDataroomsPlus && !isDataroomsPremium ? (
-            <span className="ml-4 rounded-full bg-background px-2.5 py-1 text-xs tracking-normal text-foreground ring-1 ring-gray-800">
-              {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
-            </span>
-          ) : null}
-          {isDataroomsPlus ? (
-            <span className="ml-4 rounded-full bg-background px-2.5 py-1 text-xs tracking-normal text-foreground ring-1 ring-gray-800">
-              Datarooms+
-            </span>
-          ) : null}
-          {isDataroomsPremium ? (
-            <span className="ml-4 rounded-full bg-background px-2.5 py-1 text-xs tracking-normal text-foreground ring-1 ring-gray-800">
-              Premium
-            </span>
-          ) : null}
-          {isTrial ? (
-            <span className="ml-2 rounded-sm bg-foreground px-2 py-0.5 text-xs tracking-normal text-background ring-1 ring-gray-800">
-              Trial
-            </span>
-          ) : null}
-        </p>
+        <Link href="/dashboard" className="ml-2 flex items-center">
+          <img
+            src="/_static/papermark-logo.svg"
+            alt="Logo"
+            className="h-16 w-auto group-data-[collapsible=icon]:hidden"
+          />
+          <img
+            src="/_static/papermark-p.svg"
+            alt="Logo"
+            className="hidden h-12 w-auto group-data-[collapsible=icon]:block"
+          />
+        </Link>
         {isLoading ? (
           <div className="flex items-center gap-2 text-sm">
             <Loader className="h-5 w-5 animate-spin" /> Loading teams...

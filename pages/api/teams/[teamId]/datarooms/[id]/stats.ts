@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth/next";
 
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
-import { getTotalDataroomDuration } from "@/lib/tinybird";
+import { getTotalDataroomDuration } from "@/lib/analytics";
 import { CustomUser } from "@/lib/types";
 
 import { authOptions } from "../../../../auth/[...nextauth]";

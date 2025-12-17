@@ -1,42 +1,47 @@
-import { Ratelimit } from "@upstash/ratelimit";
-
-import { redis } from "@/lib/redis";
+import { rateLimit, isRedisConfigured } from "@/lib/redis";
 
 /**
- * Simple rate limiters for core endpoints
+ * Rate limiter configurations
+ * Uses unified Redis client (supports ioredis and Upstash)
  */
-export const rateLimiters = {
-  // 3 auth attempts per hour per IP
-  auth: new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(10, "20 m"),
+export const rateLimiterConfigs = {
+  // 10 auth attempts per 20 minutes per IP
+  auth: {
+    limit: 10,
+    windowSeconds: 20 * 60, // 20 minutes
     prefix: "rl:auth",
-    enableProtection: true,
-    analytics: true,
-  }),
-
-  // 5 billing operations per hour per IP
-  billing: new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(10, "20 m"),
+  },
+  // 10 billing operations per 20 minutes per IP
+  billing: {
+    limit: 10,
+    windowSeconds: 20 * 60, // 20 minutes
     prefix: "rl:billing",
-    enableProtection: true,
-    analytics: true,
-  }),
-};
+  },
+} as const;
+
+export type RateLimiterType = keyof typeof rateLimiterConfigs;
 
 /**
  * Apply rate limiting with error handling
  */
 export async function checkRateLimit(
-  limiter: Ratelimit,
+  limiterType: RateLimiterType,
   identifier: string,
-): Promise<{ success: boolean; remaining?: number; error?: string }> {
+): Promise<{ success: boolean; remaining?: number; reset?: number; error?: string }> {
+  // If Redis is not configured, allow all requests
+  if (!isRedisConfigured()) {
+    return { success: true, error: "Rate limiting unavailable (Redis not configured)" };
+  }
+
+  const config = rateLimiterConfigs[limiterType];
+  const key = `${config.prefix}:${identifier}`;
+
   try {
-    const result = await limiter.limit(identifier);
+    const result = await rateLimit(key, config.limit, config.windowSeconds);
     return {
       success: result.success,
       remaining: result.remaining,
+      reset: result.reset,
     };
   } catch (error) {
     console.error("Rate limiting error:", error);

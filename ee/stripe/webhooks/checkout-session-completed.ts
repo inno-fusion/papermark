@@ -12,7 +12,7 @@ import Stripe from "stripe";
 import { sendUpgradePersonalEmail } from "@/lib/emails/send-upgrade-personal-welcome";
 import { sendUpgradePlanEmail } from "@/lib/emails/send-upgrade-plan";
 import prisma from "@/lib/prisma";
-import { sendUpgradeOneMonthCheckinEmailTask } from "@/lib/trigger/send-scheduled-email";
+import { addJobWithTags, emailQueue } from "@/lib/queues";
 import { log } from "@/lib/utils";
 
 import { getPlanFromPriceId } from "../utils";
@@ -137,15 +137,20 @@ export async function checkoutSessionCompleted(
     }),
   );
 
+  // Schedule upgrade check-in email (40 days delay)
   waitUntil(
-    sendUpgradeOneMonthCheckinEmailTask.trigger(
+    addJobWithTags(
+      emailQueue,
+      "upgrade-checkin",
       {
+        emailType: "upgrade-checkin" as const,
         to: team.users[0].user.email as string,
         name: team.users[0].user.name as string,
         teamId,
       },
       {
-        delay: "40d",
+        delay: 40 * 24 * 60 * 60 * 1000, // 40 days in ms
+        tags: [`team_${teamId}`],
       },
     ),
   );

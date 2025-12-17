@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { getFeatureFlags } from "@/lib/featureFlags";
 import prisma from "@/lib/prisma";
 import { CustomUser } from "@/lib/types";
@@ -74,7 +75,8 @@ export default async function handler(
       dataroom.team.plan === "datarooms-plus" ||
       dataroom.team.plan === "datarooms-plus+old";
 
-    if (!featureFlags.dataroomIndex && !hasDataroomsPlusPlan) {
+    // Skip plan check in self-hosted mode
+    if (!isSelfHosted() && !featureFlags.dataroomIndex && !hasDataroomsPlusPlan) {
       return res.status(403).json({
         message: "This feature requires a Data Rooms Plus plan",
       });

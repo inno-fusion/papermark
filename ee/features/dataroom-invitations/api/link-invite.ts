@@ -4,6 +4,7 @@ import {
   SendLinkInvitationSchema,
   invitationEmailSchema,
 } from "@/ee/features/dataroom-invitations/lib/schema/dataroom-invitations";
+import { isSelfHosted } from "@/ee/limits/constants";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { LinkType } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
@@ -64,9 +65,9 @@ export default async function handle(
       return res.status(401).end("Unauthorized");
     }
 
-    // Check if dataroomInvitations feature is enabled for this team
+    // Check if dataroomInvitations feature is enabled for this team (skip in self-hosted mode)
     const featureFlags = await getFeatureFlags({ teamId });
-    if (!featureFlags.dataroomInvitations) {
+    if (!isSelfHosted() && !featureFlags.dataroomInvitations) {
       return res.status(403).json({
         error: "Dataroom invitations feature is not enabled for this team",
       });

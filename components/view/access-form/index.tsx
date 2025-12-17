@@ -211,19 +211,19 @@ export default function AccessForm({
           <p className="text-center text-sm tracking-tight text-gray-500">
             This document is securely shared with you using{" "}
             <a
-              href="https://www.papermark.com/home"
+              href="https://0xmetalabs.com"
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium hover:text-gray-600"
             >
-              Papermark
+              DocRoom by 0xMetaLabs
             </a>
             .
           </p>
           <p className="text-center text-sm tracking-tight text-gray-500">
             See how we protect your data in our{" "}
             <a
-              href={`${process.env.NEXT_PUBLIC_MARKETING_URL}/privacy`}
+              href="https://0xmetalabs.com/privacy"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-0.5 hover:text-gray-600"

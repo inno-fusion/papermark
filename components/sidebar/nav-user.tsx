@@ -165,8 +165,9 @@ export function NavUser() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    navigator.clipboard.writeText("support@papermark.com");
-                    toast.success("support@papermark.com copied to clipboard");
+                    const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@0xmetalabs.com";
+                    navigator.clipboard.writeText(supportEmail);
+                    toast.success(`${supportEmail} copied to clipboard`);
                   }}
                 >
                   <MailIcon />

@@ -46,7 +46,6 @@ import {
 import { Button } from "../ui/button";
 import { AnnotationToggle } from "./annotations/annotation-toggle";
 import { ConversationSidebar } from "./conversations/sidebar";
-import ReportForm from "./report-form";
 
 export type TNavData = {
   linkId: string;
@@ -243,17 +242,14 @@ export default function Nav({
                   className="h-16 w-36 object-contain"
                   src={brand.logo}
                   alt="Logo"
-                  // fill
-                  // quality={100}
-                  // priority
                 />
               ) : (
-                <Link
-                  href={`https://www.papermark.com/home?utm_campaign=navbar&utm_medium=navbar&utm_source=papermark-${linkId}`}
-                  target="_blank"
-                  className="text-2xl font-bold tracking-tighter text-white"
-                >
-                  Papermark
+                <Link href="https://0xmetalabs.com" target="_blank">
+                  <img
+                    src="/_static/papermark-logo-light.svg"
+                    alt="Logo"
+                    className="h-10 w-auto"
+                  />
                 </Link>
               )}
             </div>
@@ -463,13 +459,6 @@ export default function Nav({
                 </span>
               </div>
             ) : null}
-            {/* add a separator that doesn't use radix or shadcn  */}
-            <div className="h-6 w-px bg-gray-800" />
-            <ReportForm
-              linkId={linkId}
-              documentId={documentId}
-              viewId={viewId}
-            />
           </div>
         </div>
       </div>

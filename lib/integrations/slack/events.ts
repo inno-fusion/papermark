@@ -13,8 +13,18 @@ export class SlackEventManager {
   }
 
   async processEvent(eventData: SlackEventData): Promise<void> {
+    // Skip if Slack is not configured
+    if (!this.client.isConfigured) {
+      return;
+    }
+
     try {
       const env = getSlackEnv();
+
+      // Skip if Slack env is not configured
+      if (!env) {
+        return;
+      }
 
       const integration = await prisma.installedIntegration.findUnique({
         where: {

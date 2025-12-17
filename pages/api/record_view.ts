@@ -3,7 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
 
 import { newId } from "@/lib/id-helper";
-import { publishPageView } from "@/lib/tinybird";
+import { publishPageView } from "@/lib/analytics";
 import { Geo } from "@/lib/types";
 import { capitalize, getDomainWithoutWWW, log } from "@/lib/utils";
 import { LOCALHOST_GEO_DATA, getGeoData } from "@/lib/utils/geo";

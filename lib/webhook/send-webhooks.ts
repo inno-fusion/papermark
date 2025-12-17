@@ -1,10 +1,9 @@
 import { Webhook } from "@prisma/client";
 
-import { qstash } from "@/lib/cron";
+import { webhookDeliveryQueue } from "@/lib/queues";
 
-import { createWebhookSignature } from "./signature";
 import { prepareWebhookPayload } from "./transform";
-import { EventDataProps, WebhookPayload, WebhookTrigger } from "./types";
+import { EventDataProps, WebhookTrigger } from "./types";
 
 // Send webhooks to multiple webhooks
 export const sendWebhooks = async ({
@@ -23,44 +22,37 @@ export const sendWebhooks = async ({
   const payload = prepareWebhookPayload(trigger, data);
 
   return await Promise.all(
-    webhooks.map((webhook) =>
-      publishWebhookEventToQStash({ webhook, payload }),
-    ),
+    webhooks.map((webhook) => queueWebhookDelivery({ webhook, payload })),
   );
 };
 
-// Publish webhook event to QStash
-const publishWebhookEventToQStash = async ({
+// Queue webhook for delivery via BullMQ
+const queueWebhookDelivery = async ({
   webhook,
   payload,
 }: {
   webhook: Pick<Webhook, "pId" | "url" | "secret">;
-  payload: WebhookPayload;
+  payload: { id: string; event: string; createdAt: string; data: unknown };
 }) => {
-  // TODO: add proper domain like app.papermark.dev in dev
-  const callbackUrl = new URL(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhooks/callback`,
-  );
-  callbackUrl.searchParams.append("webhookId", webhook.pId);
-  callbackUrl.searchParams.append("eventId", payload.id);
-  callbackUrl.searchParams.append("event", payload.event);
-
-  const signature = await createWebhookSignature(webhook.secret, payload);
-
-  const response = await qstash.publishJSON({
-    url: webhook.url,
-    body: payload,
-    headers: {
-      "X-Papermark-Signature": signature,
-      "Upstash-Hide-Headers": "true",
+  const job = await webhookDeliveryQueue.add(
+    `webhook-${payload.event}-${payload.id}`,
+    {
+      webhookId: webhook.pId,
+      webhookUrl: webhook.url,
+      webhookSecret: webhook.secret,
+      eventId: payload.id,
+      event: payload.event,
+      payload: payload as Record<string, unknown>,
     },
-    callback: callbackUrl.href,
-    failureCallback: callbackUrl.href,
-  });
+    {
+      // Use eventId + webhookId as unique job id to prevent duplicates
+      jobId: `${payload.id}-${webhook.pId}`,
+    },
+  );
 
-  if (!response.messageId) {
-    console.error("Failed to publish webhook event to QStash", response);
-  }
+  console.log(
+    `[Webhook] Queued delivery for ${payload.event} to ${webhook.url} (job: ${job.id})`,
+  );
 
-  return response;
+  return { messageId: job.id };
 };

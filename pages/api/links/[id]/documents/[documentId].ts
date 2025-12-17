@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 
 import { DataroomBrand, LinkAudienceType } from "@prisma/client";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { fetchDataroomDocumentLinkData } from "@/lib/api/links/link-data";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
@@ -131,12 +132,14 @@ export default async function handle(
     const returnLink = {
       ...link,
       dataroomDocument: linkData.dataroom?.documents[0],
-      ...(teamPlan === "free" && {
-        customFields: [], // reset custom fields for free plan
-        enableAgreement: false,
-        enableWatermark: false,
-        permissionGroupId: null,
-      }),
+      // Skip feature restrictions in self-hosted mode
+      ...(!isSelfHosted() &&
+        teamPlan === "free" && {
+          customFields: [], // reset custom fields for free plan
+          enableAgreement: false,
+          enableWatermark: false,
+          permissionGroupId: null,
+        }),
     };
 
     return res.status(200).json({ linkType, link: returnLink, brand });

@@ -10,7 +10,6 @@ import path from "node:path";
 import { getTeamS3ClientAndConfig } from "@/lib/files/aws-client";
 import { RedisLocker } from "@/lib/files/tus-redis-locker";
 import { newId } from "@/lib/id-helper";
-import { lockerRedisClient } from "@/lib/redis";
 import { log } from "@/lib/utils";
 
 import { authOptions } from "../../auth/[...nextauth]";
@@ -22,9 +21,7 @@ export const config = {
   },
 };
 
-const locker = new RedisLocker({
-  redisClient: lockerRedisClient,
-});
+const locker = new RedisLocker();
 
 const tusServer = new Server({
   // `path` needs to match the route declared by the next file router

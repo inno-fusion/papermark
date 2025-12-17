@@ -69,10 +69,10 @@ export default async function handle(
 
         await redis.set(
           `email-change-request:user:${sessionUser.id}`,
-          {
+          JSON.stringify({
             email: sessionUser.email,
             newEmail: email,
-          },
+          }),
           {
             px: expiresIn,
           },

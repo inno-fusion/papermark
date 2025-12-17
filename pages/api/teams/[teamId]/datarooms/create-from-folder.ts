@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { getLimits } from "@/ee/limits/server";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { DataroomFolder, Document, Folder } from "@prisma/client";
@@ -173,10 +174,13 @@ export default async function handle(
           .json({ message: "Trial data room already exists" });
       }
 
-      if (["free", "pro"].includes(team.plan) && !team.plan.includes("drtrial")) {
-        return res
-          .status(400)
-          .json({ message: "You need a Business plan to create a data room" });
+      // Skip plan check in self-hosted mode
+      if (!isSelfHosted()) {
+        if (["free", "pro"].includes(team.plan) && !team.plan.includes("drtrial")) {
+          return res
+            .status(400)
+            .json({ message: "You need a Business plan to create a data room" });
+        }
       }
 
       // Fetch the folder structure
