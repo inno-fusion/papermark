@@ -3,7 +3,7 @@ import { NextFetchEvent, NextRequest, NextResponse } from "next/server";
 import AppMiddleware from "@/lib/middleware/app";
 import DomainMiddleware from "@/lib/middleware/domain";
 
-import { BLOCKED_PATHNAMES } from "./lib/constants";
+import { BLOCKED_PATHNAMES, DEFAULT_LINK_DOMAIN } from "./lib/constants";
 import IncomingWebhookMiddleware, {
   isWebhookPath,
 } from "./lib/middleware/incoming-webhooks";
@@ -27,7 +27,7 @@ function isCustomDomain(host: string) {
       !(
         host?.includes("localhost") ||
         host?.includes("papermark.io") ||
-        host?.includes("papermark.com") ||
+        host?.includes(DEFAULT_LINK_DOMAIN) ||
         host?.endsWith(".vercel.app")
       ))
   );

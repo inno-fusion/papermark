@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { sendViewedDataroomEmail } from "@/lib/emails/send-viewed-dataroom";
 import { sendViewedDocumentEmail } from "@/lib/emails/send-viewed-document";
 import prisma from "@/lib/prisma";
@@ -177,10 +178,12 @@ export default async function handle(
     ownerEmail = ownerUser?.user.email || null;
   }
 
+  // Include location in notifications for self-hosted or premium plans
   const includeLocation =
-    !view.team?.plan?.includes("free") &&
-    !view.team?.plan?.includes("starter") &&
-    !view.team?.plan?.includes("pro");
+    isSelfHosted() ||
+    (!view.team?.plan?.includes("free") &&
+      !view.team?.plan?.includes("starter") &&
+      !view.team?.plan?.includes("pro"));
 
   const locationString =
     locationData.country === "US"

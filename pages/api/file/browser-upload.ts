@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { type HandleUploadBody, handleUpload } from "@vercel/blob/client";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import prisma from "@/lib/prisma";
 import { CustomUser } from "@/lib/types";
 
@@ -43,9 +44,11 @@ export default async function handler(
 
         let maxSize = 30 * 1024 * 1024; // 30 MB
         const stripedTeamPlan = team?.plan.replace("+old", "");
+        // In self-hosted mode or on business/datarooms plans, allow larger uploads
         if (
-          stripedTeamPlan &&
-          ["business", "datarooms", "datarooms-plus"].includes(stripedTeamPlan)
+          isSelfHosted() ||
+          (stripedTeamPlan &&
+            ["business", "datarooms", "datarooms-plus"].includes(stripedTeamPlan))
         ) {
           maxSize = 100 * 1024 * 1024; // 100 MB
         }

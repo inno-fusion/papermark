@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { hashToken } from "@/lib/api/auth/token";
 import { getFeatureFlags } from "@/lib/featureFlags";
 import { newId } from "@/lib/id-helper";
@@ -15,11 +16,14 @@ export default async function handle(
 ) {
   const { teamId } = req.query as { teamId: string };
 
-  const features = await getFeatureFlags({ teamId });
-  if (!features.tokens) {
-    return res
-      .status(403)
-      .json({ error: "This feature is not available for your team" });
+  // Skip feature flag check in self-hosted mode
+  if (!isSelfHosted()) {
+    const features = await getFeatureFlags({ teamId });
+    if (!features.tokens) {
+      return res
+        .status(403)
+        .json({ error: "This feature is not available for your team" });
+    }
   }
 
   if (req.method === "GET") {

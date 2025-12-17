@@ -9,7 +9,9 @@ import {
   DATAROOMS_PREMIUM_PLAN_LIMITS,
   FREE_PLAN_LIMITS,
   PRO_PLAN_LIMITS,
+  SELF_HOSTED_PLAN_LIMITS,
   TPlanLimits,
+  isSelfHosted,
 } from "./constants";
 
 // Function to determine if a plan is free or free+drtrial
@@ -95,6 +97,25 @@ export async function getLimits({
   const documentCount = team._count.documents;
   const linkCount = team._count.links;
   const userCount = team._count.users + team._count.invitations;
+
+  // Self-hosted mode: return unlimited limits
+  if (isSelfHosted()) {
+    return {
+      ...SELF_HOSTED_PLAN_LIMITS,
+      links: Infinity,
+      documents: Infinity,
+      conversationsInDataroom: true,
+      fileSizeLimits: {
+        video: 10000, // 10GB
+        document: 10000, // 10GB
+        image: 10000, // 10GB
+        excel: 10000, // 10GB
+        maxFiles: 999999,
+        maxPages: 999999,
+      },
+      usage: { documents: documentCount, links: linkCount, users: userCount },
+    };
+  }
 
   // parse the limits json with zod and return the limits
   // {datarooms: 1, users: 1, domains: 1, customDomainOnPro: boolean, customDomainInDataroom: boolean}

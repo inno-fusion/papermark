@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { getLimits } from "@/ee/limits/server";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import {
@@ -168,7 +169,8 @@ export default async function handle(
         return res.status(401).end("Unauthorized");
       }
 
-      if (team.plan.includes("drtrial")) {
+      // Skip trial limit in self-hosted mode
+      if (!isSelfHosted() && team.plan.includes("drtrial")) {
         return res.status(403).json({
           message:
             "You've reached the limit of datarooms. Consider upgrading your plan.",

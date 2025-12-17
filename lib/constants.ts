@@ -1,3 +1,7 @@
+// Default domain for links - configurable via environment variable
+export const DEFAULT_LINK_DOMAIN =
+  process.env.NEXT_PUBLIC_APP_DOMAIN || "papermark.com";
+
 export const FADE_IN_ANIMATION_SETTINGS = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },

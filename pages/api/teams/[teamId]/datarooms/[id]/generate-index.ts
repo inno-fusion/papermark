@@ -4,6 +4,7 @@ import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { ItemType } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { generateDataroomIndex } from "@/lib/dataroom/index-generator";
 import { getFeatureFlags } from "@/lib/featureFlags";
 import prisma from "@/lib/prisma";
@@ -50,10 +51,13 @@ export default async function handle(
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    if (!team.plan.includes("datarooms") && !team.plan.includes("trial")) {
-      return res.status(401).json({
-        error: "Please upgrade to a Data Rooms plan to generate an index",
-      });
+    // Skip plan check in self-hosted mode
+    if (!isSelfHosted()) {
+      if (!team.plan.includes("datarooms") && !team.plan.includes("trial")) {
+        return res.status(401).json({
+          error: "Please upgrade to a Data Rooms plan to generate an index",
+        });
+      }
     }
 
     // Get the dataroom link with all necessary data

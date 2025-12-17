@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+import { isSelfHosted } from "@/ee/limits/constants";
 import { errorhandler } from "@/lib/errorHandler";
 import { getFeatureFlags } from "@/lib/featureFlags";
 import prisma from "@/lib/prisma";
@@ -56,11 +57,11 @@ export default async function handle(
       return res.status(403).json({ error: "Access denied" });
     }
 
-    // Check if annotations feature is enabled for this team
+    // Check if annotations feature is enabled for this team (skip in self-hosted mode)
     const featureFlags = await getFeatureFlags({
       teamId: view.link.teamId || undefined,
     });
-    if (!featureFlags.annotations) {
+    if (!isSelfHosted() && !featureFlags.annotations) {
       return res.status(200).json([]); // Return empty array if feature is disabled
     }
 

@@ -6,6 +6,9 @@ import { useMemo } from "react";
 
 import { fetcher } from "@/lib/utils";
 
+// Check if running in self-hosted mode
+const isSelfHosted = () => process.env.NEXT_PUBLIC_SELFHOSTED === "1";
+
 interface BillingProps {
   id: string;
   plan: string;
@@ -89,23 +92,60 @@ export function usePlan({
 }: { withDiscount?: boolean } = {}) {
   const teamInfo = useTeam();
   const teamId = teamInfo?.currentTeam?.id;
+  const selfHosted = isSelfHosted();
 
   const {
     data: plan,
     error,
     mutate,
   } = useSWR<PlanResponse>(
-    teamId ? `/api/teams/${teamId}/billing/plan${withDiscount ? "?withDiscount=true" : ""}` : null,
+    // Skip fetching in self-hosted mode
+    !selfHosted && teamId ? `/api/teams/${teamId}/billing/plan${withDiscount ? "?withDiscount=true" : ""}` : null,
     fetcher,
   );
 
-  // Parse the plan using the parsing function
+  // Parse the plan using the parsing function (must be called unconditionally)
   const parsedPlan = useMemo(() => {
+    if (selfHosted) {
+      return { plan: "datarooms-premium" as BasePlan, trial: null, old: false };
+    }
     if (!plan || !plan.plan) {
       return { plan: null, trial: null, old: false };
     }
     return parsePlan(plan.plan);
-  }, [plan]);
+  }, [plan, selfHosted]);
+
+  // Self-hosted mode: return premium plan with all features enabled
+  if (selfHosted) {
+    return {
+      plan: "datarooms-premium" as BasePlan,
+      planName: "Self-Hosted",
+      originalPlan: "datarooms-premium",
+      trial: null,
+      isTrial: false,
+      isOldAccount: false,
+      isCustomer: true,
+      isAnnualPlan: true,
+      startsAt: null,
+      endsAt: null,
+      cancelledAt: null,
+      isPaused: false,
+      isCancelled: false,
+      pauseStartsAt: null,
+      discount: null,
+      isFree: false,
+      isStarter: false,
+      isPro: false,
+      isBusiness: false,
+      isDatarooms: true,
+      isDataroomsPlus: true,
+      isDataroomsPremium: true,
+      isSelfHosted: true,
+      loading: false,
+      error: null,
+      mutate,
+    };
+  }
 
   return {
     plan: parsedPlan.plan ?? "free",
@@ -131,6 +171,7 @@ export function usePlan({
       parsedPlan.plan === "datarooms" || parsedPlan.plan === "datarooms-plus" || parsedPlan.plan === "datarooms-premium",
     isDataroomsPlus: parsedPlan.plan === "datarooms-plus",
     isDataroomsPremium: parsedPlan.plan === "datarooms-premium",
+    isSelfHosted: false,
     loading: !plan && !error && !!teamId, // Only show loading if we have a teamId but no data
     error,
     mutate,

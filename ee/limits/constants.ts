@@ -1,5 +1,8 @@
 // INFO: for numeric values,`null` means unlimited
 
+// Check if running in self-hosted mode
+export const isSelfHosted = () => process.env.NEXT_PUBLIC_SELFHOSTED === "1";
+
 export type TPlanLimits = {
   users: number;
   links: number | null;
@@ -11,6 +14,20 @@ export type TPlanLimits = {
   advancedLinkControlsOnPro: boolean | null;
   watermarkOnBusiness?: boolean | null;
   agreementOnBusiness?: boolean | null;
+};
+
+// Self-hosted mode: unlimited everything
+export const SELF_HOSTED_PLAN_LIMITS: TPlanLimits = {
+  users: 999999,
+  links: null, // unlimited
+  documents: null, // unlimited
+  domains: 999999,
+  datarooms: 999999,
+  customDomainOnPro: true,
+  customDomainInDataroom: true,
+  advancedLinkControlsOnPro: true,
+  watermarkOnBusiness: true,
+  agreementOnBusiness: true,
 };
 
 export const FREE_PLAN_LIMITS = {

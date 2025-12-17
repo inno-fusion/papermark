@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 import { FolderTemplate } from "@/ee/features/templates/constants/dataroom-templates";
+import { isSelfHosted } from "@/ee/limits/constants";
 import { getLimits } from "@/ee/limits/server";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import slugify from "@sindresorhus/slugify";
@@ -102,15 +103,18 @@ export default async function handle(
       ];
 
       // Allow free plan (for onboarding) or any plan that includes allowed plans or drtrial
-      const hasAccess = 
-        team.plan === "free" || // Allow free plan during onboarding
-        team.plan.includes("drtrial") || // Allow any trial plan
-        allowedPlans.some((plan) => team.plan.includes(plan));
+      // Skip plan check in self-hosted mode
+      if (!isSelfHosted()) {
+        const hasAccess =
+          team.plan === "free" || // Allow free plan during onboarding
+          team.plan.includes("drtrial") || // Allow any trial plan
+          allowedPlans.some((plan) => team.plan.includes(plan));
 
-      if (!hasAccess) {
-        return res.status(403).json({
-          message: "This feature requires a datarooms plan. Please upgrade to access AI-generated data rooms.",
-        });
+        if (!hasAccess) {
+          return res.status(403).json({
+            message: "This feature requires a datarooms plan. Please upgrade to access AI-generated data rooms.",
+          });
+        }
       }
 
       // Limits: Check if the user has reached the limit of datarooms in the team

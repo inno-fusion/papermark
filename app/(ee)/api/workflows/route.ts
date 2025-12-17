@@ -4,6 +4,7 @@ import {
   CreateWorkflowRequestSchema,
   formatZodError,
 } from "@/ee/features/workflows/lib/validation";
+import { isSelfHosted } from "@/ee/limits/constants";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
@@ -161,24 +162,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Team not found" }, { status: 404 });
     }
 
-    // Check if workflows feature flag is enabled
+    // Check if workflows feature flag is enabled (skip in self-hosted mode)
     const featureFlags = await getFeatureFlags({ teamId });
-    if (!featureFlags.workflows) {
+    if (!isSelfHosted() && !featureFlags.workflows) {
       return NextResponse.json(
         { error: "This feature is not available for your team" },
         { status: 403 },
       );
     }
 
-    // Check plan - require Business or DataRooms plan
-    if (team.plan === "free" || team.plan === "pro") {
-      return NextResponse.json(
-        {
-          error: "Workflows require a Business or Data Rooms plan",
-          requiresUpgrade: true,
-        },
-        { status: 403 },
-      );
+    // Check plan - require Business or DataRooms plan (skip in self-hosted mode)
+    if (!isSelfHosted()) {
+      if (team.plan === "free" || team.plan === "pro") {
+        return NextResponse.json(
+          {
+            error: "Workflows require a Business or Data Rooms plan",
+            requiresUpgrade: true,
+          },
+          { status: 403 },
+        );
+      }
     }
 
     // Validate domain and slug
