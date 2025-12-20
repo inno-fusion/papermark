@@ -159,9 +159,13 @@ const nextConfig = {
       },
     ];
   },
+  // Prevent Next.js from bundling these packages - load from node_modules at runtime
+  serverExternalPackages: ["geoip-lite"],
   experimental: {
     outputFileTracingIncludes: {
       "/api/mupdf/*": ["./node_modules/mupdf/dist/*.wasm"],
+      // Include geoip-lite data files for IP geolocation (used in self-hosted mode)
+      "/*": ["./node_modules/geoip-lite/data/*"],
     },
     missingSuspenseWithCSRBailout: false,
   },

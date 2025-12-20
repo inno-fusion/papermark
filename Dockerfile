@@ -114,6 +114,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
+# Copy geoip-lite data files to where Next.js expects them
+COPY --from=deps /app/node_modules/geoip-lite/data ./.next/server/data
+
 # Copy Prisma schema and migrations for runtime
 COPY --from=builder /app/prisma ./prisma
 

@@ -9,7 +9,7 @@ import sendNotification from "../api/notification-helper";
 import { sendLinkViewWebhook } from "../api/views/send-webhook-event";
 import { EU_COUNTRY_CODES } from "../constants";
 import { capitalize, getDomainWithoutWWW } from "../utils";
-import { LOCALHOST_GEO_DATA, LOCALHOST_IP } from "../utils/geo";
+import { getGeoFromIP, LOCALHOST_IP } from "../utils/geo";
 
 export async function recordLinkView({
   req,
@@ -38,7 +38,13 @@ export async function recordLinkView({
     return null;
   }
 
-  const ip = process.env.VERCEL === "1" ? ipAddress(req) : LOCALHOST_IP;
+  // Get IP address - on Vercel use their function, otherwise check common headers
+  const ip: string =
+    process.env.VERCEL === "1"
+      ? ipAddress(req) || LOCALHOST_IP
+      : req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        req.headers.get("x-real-ip") ||
+        LOCALHOST_IP;
 
   // get continent, region & geolocation data
   // interesting, geolocation().region is Vercel's edge region – NOT the actual region
@@ -49,10 +55,10 @@ export async function recordLinkView({
           continent: req.headers.get("x-vercel-ip-continent"),
           region: geolocation(req).countryRegion,
         }
-      : LOCALHOST_GEO_DATA;
+      : await getGeoFromIP(ip);
 
   const geo =
-    process.env.VERCEL === "1" ? geolocation(req) : LOCALHOST_GEO_DATA;
+    process.env.VERCEL === "1" ? geolocation(req) : await getGeoFromIP(ip);
 
   const isEuCountry = geo.country && EU_COUNTRY_CODES.includes(geo.country);
 
