@@ -12,6 +12,7 @@ import { useDocumentOverview } from "@/lib/swr/use-document-overview";
 
 import { UpgradePlanModal } from "@/components/billing/upgrade-plan-modal";
 import { AnnotationSheet } from "@/components/documents/annotations/annotation-sheet";
+import { CommentsSheet } from "@/components/documents/comments/comments-sheet";
 import DocumentHeader from "@/components/documents/document-header";
 import { DocumentPreviewButton } from "@/components/documents/document-preview-button";
 // Import placeholder components
@@ -168,6 +169,11 @@ export default function DocumentPage() {
                 />
               )}
             </>,
+            <CommentsSheet
+              key="comments"
+              documentId={prismaDocument.id}
+              teamId={teamId}
+            />,
             <DocumentPreviewButton
               key={"preview"}
               documentId={prismaDocument.id}

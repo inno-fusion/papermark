@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   BadgeInfoIcon,
   Download,
+  List,
   Maximize,
   MessageCircle,
   Slash,
@@ -44,7 +45,7 @@ import {
   BreadcrumbSeparator,
 } from "../ui/breadcrumb";
 import { Button } from "../ui/button";
-import { AnnotationToggle } from "./annotations/annotation-toggle";
+import CommentToolbarButton from "./comments/comment-toolbar-button";
 import { ConversationSidebar } from "./conversations/sidebar";
 
 export type TNavData = {
@@ -65,6 +66,16 @@ export type TNavData = {
   hasAnnotations?: boolean;
   annotationsFeatureEnabled?: boolean;
   onToggleAnnotations?: (enabled: boolean) => void;
+  commentsEnabled?: boolean;
+  commentModeActive?: boolean;
+  onToggleCommentMode?: (active: boolean) => void;
+  hasComments?: boolean;
+  commentsPanelOpen?: boolean;
+  onToggleCommentsPanel?: (open: boolean) => void;
+  // Unified panel
+  viewerPanelOpen?: boolean;
+  onToggleViewerPanel?: (open: boolean) => void;
+  hasAnyPanelContent?: boolean; // true if there are comments or annotations
 };
 
 export default function Nav({
@@ -106,10 +117,15 @@ export default function Nav({
     conversationsEnabled,
     assistantEnabled,
     isTeamMember,
-    annotationsEnabled,
-    hasAnnotations,
-    annotationsFeatureEnabled,
-    onToggleAnnotations,
+    commentsEnabled,
+    commentModeActive,
+    onToggleCommentMode,
+    hasComments,
+    commentsPanelOpen,
+    onToggleCommentsPanel,
+    viewerPanelOpen,
+    onToggleViewerPanel,
+    hasAnyPanelContent,
   } = navData;
 
   const [showConversations, setShowConversations] = useState(false);
@@ -315,13 +331,41 @@ export default function Nav({
                 View FAQ
               </Button>
             )}
-            {/* Annotations toggle button */}
-            {onToggleAnnotations && annotationsFeatureEnabled && (
-              <AnnotationToggle
-                enabled={annotationsEnabled || false}
-                onToggle={onToggleAnnotations}
-                hasAnnotations={hasAnnotations}
+            {/* Comment mode button (add comment) */}
+            {onToggleCommentMode && commentsEnabled && (
+              <CommentToolbarButton
+                active={commentModeActive || false}
+                onToggle={onToggleCommentMode}
               />
+            )}
+            {/* Unified panel button (comments + annotations) */}
+            {onToggleViewerPanel && hasAnyPanelContent && (
+              <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={() =>
+                        onToggleViewerPanel(!viewerPanelOpen)
+                      }
+                      className={
+                        viewerPanelOpen
+                          ? "bg-blue-600 text-white hover:bg-blue-700"
+                          : "bg-gray-900 text-white hover:bg-gray-900/80"
+                      }
+                      size="icon"
+                    >
+                      <List className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      {viewerPanelOpen
+                        ? "Hide panel"
+                        : "Comments & Annotations"}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
             {embeddedLinks && embeddedLinks.length > 0 ? (
               <DropdownMenu>

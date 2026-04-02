@@ -66,6 +66,7 @@ model User {
   // FAQ system
   publishedFaqItems DataroomFaqItem[]
   createdAnnotations DocumentAnnotation[] // Annotations created by this user
+  comments           DocumentComment[]    // Comments/replies by this admin user
 
   installedIntegrations InstalledIntegration[]
 }
@@ -144,6 +145,7 @@ model View {
   initialConversations Conversation[]     @relation("initialView")
 
   uploadedDocuments DocumentUpload[] // uploaded documents by this view
+  comments          DocumentComment[] // comments created from this view
 
   // Analytics (replaces Tinybird)
   pageViews       PageView[]

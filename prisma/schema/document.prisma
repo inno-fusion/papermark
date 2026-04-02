@@ -28,6 +28,7 @@ model Document {
   datarooms DataroomDocument[] // Datarooms associated with this document
   tags      TagItem[]
   annotations DocumentAnnotation[] // Annotations for this document
+  comments    DocumentComment[]    // Viewer comments on this document
 
   // Analytics (replaces Tinybird)
   pageViews   PageView[]

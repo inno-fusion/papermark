@@ -23,6 +23,7 @@ model Team {
   uploadedDocuments DocumentUpload[]
   Tag               Tag[]
   annotations       DocumentAnnotation[] // Annotations created by team members
+  comments          DocumentComment[]    // Viewer comments on team documents
 
   installedIntegrations InstalledIntegration[]
 

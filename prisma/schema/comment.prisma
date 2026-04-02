@@ -1,0 +1,48 @@
+model DocumentComment {
+  id           String    @id @default(cuid())
+  content      String    // Plain text comment content
+  pageNumber   Int       // Which page (1-indexed)
+
+  // Pin coordinates as percentages (0-100) of page dimensions
+  pinX         Float     // X position % where the pin is placed
+  pinY         Float     // Y position % where the pin is placed
+
+  // Optional highlight region (for drag-to-select on desktop)
+  regionX      Float?    // Top-left X % (null if just a pin click)
+  regionY      Float?    // Top-left Y %
+  regionWidth  Float?    // Width %
+  regionHeight Float?    // Height %
+
+  documentId   String
+  document     Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  linkId       String
+  link         Link      @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  viewId       String
+  view         View      @relation(fields: [viewId], references: [id], onDelete: Cascade)
+  viewerId     String?   // Persistent viewer identity (for "delete own" across sessions)
+  viewerEmail  String?   // Denormalized for display
+  viewerName   String?   // Denormalized for display
+  teamId       String
+  team         Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // Admin replies use userId instead of viewId
+  userId       String?   // Set when comment is from an admin/team member
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Threading
+  parentId     String?   // Null = top-level comment, non-null = reply
+  parent       DocumentComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      DocumentComment[] @relation("CommentReplies")
+
+  isResolved   Boolean   @default(false) // Admin can resolve threads
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([documentId])
+  @@index([linkId])
+  @@index([viewId])
+  @@index([teamId])
+  @@index([parentId])
+  @@index([documentId, linkId])
+}

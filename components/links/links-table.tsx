@@ -220,6 +220,7 @@ export default function LinksTable({
         ? link.enableNotification
         : false,
       enableFeedback: link.enableFeedback ? link.enableFeedback : false,
+      enableComments: (link as any).enableComments ?? false,
       enableScreenshotProtection: link.enableScreenshotProtection
         ? link.enableScreenshotProtection
         : false,

@@ -59,6 +59,7 @@ export default function ViewData({
   dataroomId,
   canDownload,
   annotationsEnabled,
+  commentsEnabled,
 }: {
   viewData: DEFAULT_DOCUMENT_VIEW_TYPE | DEFAULT_DATAROOM_DOCUMENT_VIEW_TYPE;
   link: LinkWithDocument | LinkWithDataroomDocument;
@@ -76,6 +77,7 @@ export default function ViewData({
   dataroomId?: string;
   canDownload?: boolean;
   annotationsEnabled?: boolean;
+  commentsEnabled?: boolean;
 }) {
   const { isMobile } = useMediaQuery();
 
@@ -162,6 +164,7 @@ export default function ViewData({
       ipAddress={viewData.ipAddress}
       linkName={link.name ?? `Link #${link.id.slice(-5)}`}
       navData={navData}
+      commentsEnabled={commentsEnabled}
     />
   ) : viewData.pages && document.versions[0].isVertical ? (
     <PagesVerticalViewer
@@ -179,6 +182,7 @@ export default function ViewData({
       ipAddress={viewData.ipAddress}
       linkName={link.name ?? `Link #${link.id.slice(-5)}`}
       navData={navData}
+      commentsEnabled={commentsEnabled}
     />
   ) : viewData.fileType === "video" ? (
     <VideoViewer

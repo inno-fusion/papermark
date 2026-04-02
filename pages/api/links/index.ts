@@ -169,6 +169,7 @@ export default async function handler(
             enableIndexFile: enableIndexFile,
             enableNotification: linkData.enableNotification,
             enableFeedback: linkData.enableFeedback,
+            enableComments: linkData.enableComments,
             enableScreenshotProtection: linkData.enableScreenshotProtection,
             enableCustomMetatag: linkData.enableCustomMetatag,
             metaTitle: linkData.metaTitle || null,

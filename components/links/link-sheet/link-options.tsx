@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/collapsible";
 
 import AgreementSection from "./agreement-section";
+import CommentsSection from "./comments-section";
 import ConversationSection from "./conversation-section";
 import CustomFieldsSection from "./custom-fields-section";
 import IndexFileSection from "./index-file-section";
@@ -141,6 +142,13 @@ export const LinkOptions = ({
         handleUpgradeStateChange={handleUpgradeStateChange}
       />
       <AllowDownloadSection {...{ data, setData }} />
+      <FeedbackSection {...{ data, setData }} />
+      <QuestionSection
+        {...{ data, setData }}
+        isAllowed={true}
+        handleUpgradeStateChange={handleUpgradeStateChange}
+      />
+      <CommentsSection {...{ data, setData }} />
 
       {data.audienceType === LinkAudienceType.GENERAL ? (
         <>

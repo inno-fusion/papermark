@@ -8,6 +8,10 @@ import { useSession } from "next-auth/react";
 import useSWR from "swr";
 
 import { useViewerAnnotations } from "@/lib/swr/use-annotations";
+import {
+  useViewerComments,
+  type Comment,
+} from "@/lib/swr/use-comments";
 import { useSafePageViewTracker } from "@/lib/tracking/safe-page-view-tracker";
 import { getTrackingOptions } from "@/lib/tracking/tracking-config";
 import { WatermarkConfig } from "@/lib/types";
@@ -20,7 +24,15 @@ import {
 } from "@/components/ui/resizable";
 
 import { ScreenProtector } from "../ScreenProtection";
-import { AnnotationPanel } from "../annotations/annotation-panel";
+import CommentBottomSheet from "../comments/comment-bottom-sheet";
+import CommentMarker from "../comments/comment-marker";
+import {
+  CommentPopoverContent,
+  CreateCommentPopover,
+} from "../comments/comment-popover";
+import CommentSelectionLayer from "../comments/comment-selection-layer";
+import MobileViewerPanel from "../comments/mobile-viewer-panel";
+import { ViewerPanel } from "../viewer-panel";
 import Nav, { TNavData } from "../nav";
 import { PoweredBy } from "../powered-by";
 import Question from "../question";
@@ -47,6 +59,7 @@ export default function PagesHorizontalViewer({
   ipAddress,
   linkName,
   navData,
+  commentsEnabled = false,
 }: {
   pages: {
     file: string;
@@ -70,6 +83,7 @@ export default function PagesHorizontalViewer({
   ipAddress?: string;
   linkName?: string;
   navData: TNavData;
+  commentsEnabled?: boolean;
 }) {
   const { isMobile, isPreview, linkId, documentId, viewId, dataroomId, brand } =
     navData;
@@ -102,12 +116,118 @@ export default function PagesHorizontalViewer({
 
   const [submittedFeedback, setSubmittedFeedback] = useState<boolean>(false);
   const [accountCreated, setAccountCreated] = useState<boolean>(false);
-  const [annotationsEnabled, setAnnotationsEnabled] = useState(false);
+  const [viewerPanelOpen, setViewerPanelOpen] = useState(false);
 
   // Fetch annotations for this link
   const { annotations } = useViewerAnnotations(linkId, documentId, viewId);
   const hasAnnotations = annotations && annotations.length > 0;
   const [scale, setScale] = useState<number>(1);
+
+  // Comments state and data
+  const [commentModeActive, setCommentModeActive] = useState(false);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [markersVisible, setMarkersVisible] = useState(true);
+  const [pendingComment, setPendingComment] = useState<{
+    pageNumber: number;
+    pinX: number;
+    pinY: number;
+    region?: {
+      regionX: number;
+      regionY: number;
+      regionWidth: number;
+      regionHeight: number;
+    };
+  } | null>(null);
+
+  const { comments, mutate: mutateComments } = useViewerComments(
+    commentsEnabled ? linkId : "",
+    commentsEnabled ? viewId : undefined,
+  );
+
+  const getPageComments = (page: number) =>
+    comments?.filter((c) => c.pageNumber === page) ?? [];
+
+  const activeComment = comments?.find((c) => c.id === activeCommentId) ?? null;
+
+  const handleCreateComment = async (content: string) => {
+    if (!pendingComment || !viewId) return;
+    try {
+      await fetch(`/api/links/${linkId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          viewId,
+          content,
+          pageNumber: pendingComment.pageNumber,
+          pinX: pendingComment.pinX,
+          pinY: pendingComment.pinY,
+          ...pendingComment.region,
+        }),
+      });
+      setPendingComment(null);
+      setCommentModeActive(false);
+      mutateComments();
+    } catch (error) {
+      console.error("Failed to create comment:", error);
+    }
+  };
+
+  const handleReplyToComment = async (content: string) => {
+    if (!activeCommentId || !viewId) return;
+    try {
+      await fetch(`/api/links/${linkId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          viewId,
+          content,
+          pageNumber: activeComment?.pageNumber ?? 1,
+          pinX: activeComment?.pinX ?? 0,
+          pinY: activeComment?.pinY ?? 0,
+          parentId: activeCommentId,
+        }),
+      });
+      mutateComments();
+    } catch (error) {
+      console.error("Failed to reply to comment:", error);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!viewId) return;
+    try {
+      await fetch(
+        `/api/links/${linkId}/comments?viewId=${viewId}&commentId=${commentId}`,
+        { method: "DELETE" },
+      );
+      if (commentId === activeCommentId) setActiveCommentId(null);
+      mutateComments();
+    } catch (error) {
+      console.error("Failed to delete comment:", error);
+    }
+  };
+
+  const handleCommentMarkerClick = (commentId: string) => {
+    if (activeCommentId === commentId) {
+      setActiveCommentId(null);
+      return;
+    }
+    setActiveCommentId(commentId);
+
+    if (isMobile) {
+      setTimeout(() => {
+        const marker = document.querySelector(
+          `[data-comment-id="${commentId}"]`,
+        ) as HTMLElement | null;
+        if (!marker) return;
+        const rect = marker.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        if (rect.top > viewportHeight * 0.4) {
+          marker.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 100);
+    }
+  };
 
   const initialViewedPages = Array.from({ length: numPages }, (_, index) => ({
     pageNumber: index + 1,
@@ -591,15 +711,19 @@ export default function PagesHorizontalViewer({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [containerRef.current, pageNumber, imageDimensions]);
 
-  const handleToggleAnnotations = (enabled: boolean) => {
-    setAnnotationsEnabled(enabled);
-  };
+  const hasAnyPanelContent =
+    (commentsEnabled && comments && comments.length > 0) ||
+    (navData.annotationsFeatureEnabled && hasAnnotations);
 
   const navDataWithAnnotations = {
     ...navData,
-    annotationsEnabled,
-    hasAnnotations,
-    onToggleAnnotations: handleToggleAnnotations,
+    commentsEnabled,
+    commentModeActive,
+    onToggleCommentMode: (active: boolean) => setCommentModeActive(active),
+    hasComments: comments && comments.length > 0,
+    viewerPanelOpen,
+    onToggleViewerPanel: (open: boolean) => setViewerPanelOpen(open),
+    hasAnyPanelContent: !!hasAnyPanelContent,
   };
 
   // Compute scaled sizer dimensions for accurate scroll area
@@ -626,7 +750,7 @@ export default function PagesHorizontalViewer({
         <ResizablePanelGroup direction="horizontal">
           {/* Document Content */}
           <ResizablePanel
-            defaultSize={annotationsEnabled && hasAnnotations ? 75 : 100}
+            defaultSize={viewerPanelOpen && hasAnyPanelContent ? 75 : 100}
           >
             <div className="flex h-full w-full items-center">
               <div
@@ -722,6 +846,45 @@ export default function PagesHorizontalViewer({
                                   pageIndex={index}
                                 />
                               ) : null}
+
+                              {/* Comment selection layer */}
+                              {commentsEnabled && (
+                                <CommentSelectionLayer
+                                  enabled={commentModeActive}
+                                  pageNumber={index + 1}
+                                  onCommentPlaced={(data) => {
+                                    setPendingComment(data);
+                                    setCommentModeActive(false);
+                                  }}
+                                />
+                              )}
+
+                              {/* Comment markers */}
+                              {commentsEnabled &&
+                                markersVisible &&
+                                getPageComments(index + 1).map((comment) => (
+                                  <CommentMarker
+                                    key={comment.id}
+                                    comment={comment}
+                                    isActive={activeCommentId === comment.id}
+                                    onClick={() =>
+                                      handleCommentMarkerClick(comment.id)
+                                    }
+                                    usePopover={!isMobile}
+                                    popoverContent={
+                                      !isMobile ? (
+                                        <CommentPopoverContent
+                                          comment={comment}
+                                          onReply={handleReplyToComment}
+                                          onDelete={handleDeleteComment}
+                                          isTeamMember={
+                                            navData.isTeamMember
+                                          }
+                                        />
+                                      ) : undefined
+                                    }
+                                  />
+                                ))}
 
                               {page.pageLinks ? (
                                 <map name={`page-map-${index + 1}`}>
@@ -849,20 +1012,19 @@ export default function PagesHorizontalViewer({
                 </div>
               </div>
 
-              {/* Navigation arrows with hover zones */}
+              {/* Navigation arrows — pointer-events-none on container so comment markers receive taps */}
               {pageNumber > 1 && (
                 <div
                   className={cn(
-                    "group absolute left-0 top-0 z-[1] flex h-full items-center",
+                    "pointer-events-none group absolute left-0 top-0 z-[1] flex h-full items-center",
                     isMobile ? "w-1/6" : "w-32",
                     isMobile ? "justify-start pl-1" : "justify-start pl-4",
                   )}
-                  onClick={isMobile ? goToPreviousPage : undefined}
                 >
                   <button
-                    onClick={!isMobile ? goToPreviousPage : undefined}
+                    onClick={goToPreviousPage}
                     className={cn(
-                      "rounded-full bg-gray-950/50 p-1 transition-opacity duration-200 hover:bg-gray-950/75",
+                      "pointer-events-auto rounded-full bg-gray-950/50 p-1 transition-opacity duration-200 hover:bg-gray-950/75",
                       "opacity-50 group-hover:opacity-100",
                     )}
                   >
@@ -876,16 +1038,15 @@ export default function PagesHorizontalViewer({
               {pageNumber < numPagesWithAccountCreation && (
                 <div
                   className={cn(
-                    "group absolute right-0 top-0 z-[1] flex h-full items-center",
+                    "pointer-events-none group absolute right-0 top-0 z-[1] flex h-full items-center",
                     isMobile ? "w-1/6" : "w-32",
                     isMobile ? "justify-end pr-1" : "justify-end pr-4",
                   )}
-                  onClick={isMobile ? goToNextPage : undefined}
                 >
                   <button
-                    onClick={!isMobile ? goToNextPage : undefined}
+                    onClick={goToNextPage}
                     className={cn(
-                      "rounded-full bg-gray-950/50 p-1 transition-opacity duration-200 hover:bg-gray-950/75",
+                      "pointer-events-auto rounded-full bg-gray-950/50 p-1 transition-opacity duration-200 hover:bg-gray-950/75",
                       "opacity-50 group-hover:opacity-100",
                     )}
                   >
@@ -914,26 +1075,108 @@ export default function PagesHorizontalViewer({
             </div>
           </ResizablePanel>
 
-          {/* Annotation Panel - Right Side */}
-          {navData.annotationsFeatureEnabled &&
-            annotationsEnabled &&
-            hasAnnotations && (
-              <>
-                <ResizableHandle className="w-1 bg-transparent transition-colors hover:bg-white/20" />
-                <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
-                  <AnnotationPanel
-                    brand={brand}
-                    linkId={linkId}
-                    documentId={documentId}
-                    viewId={viewId}
-                    currentPage={pageNumber}
-                    isVisible={true}
-                  />
-                </ResizablePanel>
-              </>
-            )}
+          {/* Unified Viewer Panel - Right Side (Comments + Annotations) */}
+          {viewerPanelOpen && !isMobile && hasAnyPanelContent && (
+            <>
+              <ResizableHandle className="w-1 bg-transparent transition-colors hover:bg-white/20" />
+              <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
+                <ViewerPanel
+                  brand={brand}
+                  linkId={linkId}
+                  documentId={documentId}
+                  viewId={viewId}
+                  currentPage={pageNumber}
+                  commentsEnabled={commentsEnabled}
+                  comments={comments}
+                  onReplyToComment={(commentId, content) => {
+                    setActiveCommentId(commentId);
+                    handleReplyToComment(content);
+                  }}
+                  onDeleteComment={handleDeleteComment}
+                  onSelectComment={(commentId) =>
+                    setActiveCommentId(commentId)
+                  }
+                  annotationsEnabled={
+                    !!navData.annotationsFeatureEnabled
+                  }
+                  hasAnnotations={!!hasAnnotations}
+                  markersVisible={markersVisible}
+                  onToggleMarkers={setMarkersVisible}
+                />
+              </ResizablePanel>
+            </>
+          )}
         </ResizablePanelGroup>
       </div>
+
+      {/* Create comment popover (desktop) */}
+      {commentsEnabled && pendingComment && !isMobile && (
+        <CreateCommentPopover
+          isOpen={!!pendingComment}
+          onClose={() => setPendingComment(null)}
+          onSubmit={handleCreateComment}
+        >
+          <div className="pointer-events-none fixed" />
+        </CreateCommentPopover>
+      )}
+
+      {/* Mobile bottom sheet for creating comments */}
+      {commentsEnabled && isMobile && pendingComment && (
+        <CommentBottomSheet
+          mode="create"
+          onClose={() => setPendingComment(null)}
+          onSubmit={handleCreateComment}
+        />
+      )}
+
+      {/* Mobile bottom sheet for viewing comment threads */}
+      {commentsEnabled && isMobile && activeComment && (
+        <CommentBottomSheet
+          mode="view"
+          comment={activeComment}
+          onClose={() => {
+            setActiveCommentId(null);
+            if (viewerPanelOpen) setViewerPanelOpen(false);
+          }}
+          onSubmit={() => {}}
+          onReply={handleReplyToComment}
+          onDelete={handleDeleteComment}
+          onBack={() => {
+            setActiveCommentId(null);
+          }
+          }
+        />
+      )}
+
+      {/* Mobile viewer panel (comments + annotations) */}
+      {isMobile &&
+        viewerPanelOpen &&
+        !activeComment &&
+        !pendingComment && (
+          <MobileViewerPanel
+            onClose={() => setViewerPanelOpen(false)}
+            brand={brand}
+            linkId={linkId}
+            documentId={documentId}
+            viewId={viewId}
+            currentPage={pageNumber}
+            commentsEnabled={commentsEnabled}
+            comments={comments}
+            onReplyToComment={(commentId, content) => {
+              setActiveCommentId(commentId);
+              handleReplyToComment(content);
+            }}
+            onDeleteComment={handleDeleteComment}
+            onSelectComment={(commentId) => {
+              // Keep viewerPanelOpen=true so the back button shows in the thread sheet
+              setActiveCommentId(commentId);
+            }}
+            annotationsEnabled={!!navData.annotationsFeatureEnabled}
+            hasAnnotations={!!hasAnnotations}
+            markersVisible={markersVisible}
+            onToggleMarkers={setMarkersVisible}
+          />
+        )}
     </>
   );
 }

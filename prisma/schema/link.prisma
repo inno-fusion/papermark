@@ -37,6 +37,7 @@ model Link {
   updatedAt                  DateTime   @updatedAt
   enableNotification         Boolean?   @default(true) // Optional give user a option to pause/resume the notifications
   enableFeedback             Boolean?   @default(false) // Optional give user a option to enable the reactions toolbar
+  enableComments             Boolean?   @default(false) // Allow viewers to place comments on document pages
   enableQuestion             Boolean?   @default(false) // Optional give user a option to enable the question feedback
   enableScreenshotProtection Boolean?   @default(false) // Optional give user a option to enable the screenshot protection
   feedback                   Feedback?
@@ -80,6 +81,7 @@ model Link {
   enableIndexFile   Boolean? @default(false)
 
   uploadedDocuments DocumentUpload[]
+  comments          DocumentComment[]
 
   teamId String?
   team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)

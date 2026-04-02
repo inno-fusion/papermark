@@ -66,6 +66,7 @@ export const DEFAULT_LINK_PROPS = (
   denyList: [],
   enableNotification: true,
   enableFeedback: false,
+  enableComments: false,
   enableScreenshotProtection: false,
   enableCustomMetatag: false,
   metaTitle: null,
@@ -109,6 +110,7 @@ export type DEFAULT_LINK_TYPE = {
   denyList: string[];
   enableNotification: boolean;
   enableFeedback: boolean;
+  enableComments: boolean;
   enableScreenshotProtection: boolean;
   enableCustomMetatag: boolean; // metatags
   metaTitle: string | null; // metatags

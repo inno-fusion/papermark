@@ -66,6 +66,7 @@ export default function DocumentView({
   logoOnAccessForm,
   isEmbedded,
   annotationsEnabled,
+  commentsEnabled: commentsEnabledProp,
 }: {
   link: LinkWithDocument;
   userEmail: string | null | undefined;
@@ -88,6 +89,7 @@ export default function DocumentView({
   isEmbedded?: boolean;
   logoOnAccessForm?: boolean;
   annotationsEnabled?: boolean;
+  commentsEnabled?: boolean;
 }) {
   useDisablePrint();
   const {
@@ -96,6 +98,11 @@ export default function DocumentView({
     password: linkPassword,
     enableAgreement,
   } = link;
+
+  // Comments require both the toggle AND email protection (only verified viewers can comment)
+  const commentsEnabled =
+    (commentsEnabledProp ?? (link as any).enableComments ?? false) &&
+    (emailProtected ?? false);
 
   const plausible = usePlausible();
   const analytics = useAnalytics();
@@ -304,6 +311,7 @@ export default function DocumentView({
           useAdvancedExcelViewer={useAdvancedExcelViewer}
           viewerEmail={data.email ?? verifiedEmail ?? userEmail ?? undefined}
           annotationsEnabled={annotationsEnabled}
+          commentsEnabled={commentsEnabled}
         />
       ) : (
         <div className="flex h-screen items-center justify-center">
